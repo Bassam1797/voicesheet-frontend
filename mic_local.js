@@ -11,6 +11,12 @@
 export function wireMicrophoneControls() {
   const micBtn = document.getElementById('micBtn');
   if (!micBtn) return;
+    // Set default local transcription endpoint if not defined
+    if (!window.LOCAL_STT_ENDPOINT) {
+
+    window.LOCAL_STT_ENDPOINT = 'http://localhost:8000/api/transcribe';
+  }
+
   let recording = false;
   let mediaRecorder;
   let audioChunks = [];
