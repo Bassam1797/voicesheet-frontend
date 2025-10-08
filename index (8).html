@@ -43,8 +43,9 @@
   .grid th, .grid td{ border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
   .grid th:first-child{ position:sticky; left:0; z-index:1; background:var(--hdr); }
   .grid th{ padding:6px 8px; font-weight:600; text-align:center; user-select:none; }
-  .row-hdr{ width:60px; text-align:right; color:#555; }
-  .grid td{ position:relative; min-width:40px; }
+  .row-hdr{ width:40px; text-align:right; color:#555; }
+  /* Increase default column width */
+  .grid td{ position:relative; min-width:80px; }
   .grid td input{
     width:100%; height:100%; padding:6px 8px; border:0; outline:none; font:inherit;
     background:transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -3757,18 +3758,8 @@ return String(text||'').trim();
 })();
 </script>
 
+<!-- Removed redundant LOCAL_STT_ENDPOINT injection and closing tags -->
 
-</body>
-</html>
-
-<!-- === SAFE PATCH: Robust Microphone + late-binding guards === -->
-<!-- Set local STT endpoint for self-hosted server -->
-<script>
-  if (!window.LOCAL_STT_ENDPOINT) {
-    window.LOCAL_STT_ENDPOINT = 'http://localhost:8000/api/transcribe';
-  }
-</script>
-<script>
 (function(){
   document.addEventListener("DOMContentLoaded", function(){
     // Attempt late-binding for any controls that may have been bound too early
@@ -3896,3 +3887,11 @@ return String(text||'').trim();
   }
 })();
 </script>
+<!-- Configure local STT endpoint and close the document -->
+<script>
+  if (!window.LOCAL_STT_ENDPOINT) {
+    window.LOCAL_STT_ENDPOINT = "http://localhost:8000/api/transcribe";
+  }
+</script>
+</body>
+</html>
