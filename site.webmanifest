@@ -1,0 +1,7 @@
+{
+  "name": "VoiceSheet",
+  "short_name": "VoiceSheet",
+  "start_url": "./",
+  "display": "standalone",
+  "icons": []
+}
