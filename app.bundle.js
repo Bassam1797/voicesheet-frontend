@@ -1714,7 +1714,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 /* ================== Utilities ================== */
-var MIN_COL_WIDTH = 20;
+var MIN_COL_WIDTH = 40;
 var ROW_HEIGHT = 22;
 function colLabel(n){ var s=''; while(n>0){ var m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s; }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
@@ -1882,7 +1882,7 @@ function render(){
       var table = container && container.querySelector('table.grid'); if(!table) return;
       for(var c=1; c<=COLS; c++){
         if(!colWidths[c]){
-          var base = th ? th.getBoundingClientRect().width : 80; colWidths[c] = Math.max(36, Math.floor(base*0.2));
+          var base = th ? th.getBoundingClientRect().width : 120; colWidths[c] = Math.max(36, Math.floor(base*0.2));
           var th = table.querySelector('thead th[data-c="'+c+'"]');
           if(th) th.style.width = colWidths[c] + 'px';
         }
@@ -1919,7 +1919,7 @@ function rebuild(){ var p={r:active.r, c:active.c}; render(); applyFreezeOffsets
       var table = container && container.querySelector('table.grid'); if(!table) return;
       for(var c=1; c<=COLS; c++){
         if(!colWidths[c]){
-          var base = th ? th.getBoundingClientRect().width : 80; colWidths[c] = Math.max(36, Math.floor(base*0.2));
+          var base = th ? th.getBoundingClientRect().width : 120; colWidths[c] = Math.max(36, Math.floor(base*0.2));
           var th = table.querySelector('thead th[data-c="'+c+'"]');
           if(th) th.style.width = colWidths[c] + 'px';
         }
