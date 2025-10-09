@@ -38,7 +38,8 @@
   button:focus, select:focus, input:focus, [tabindex="0"]:focus { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
 
   main{ padding:12px 16px; overflow:auto; }
-  table.grid{ border-collapse:separate; border-spacing:0; width:max-content; background:#fff; border:1px solid var(--border); }
+  /* Apply strict containment to improve rendering performance of large tables */
+  table.grid{ border-collapse:separate; border-spacing:0; width:max-content; background:#fff; border:1px solid var(--border); contain: strict; }
   .grid thead th{ position:sticky; top:0; background:var(--hdr); z-index:2; border-bottom:1px solid var(--border); }
   .grid th, .grid td{ border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
   .grid th:first-child{ position:sticky; left:0; z-index:1; background:var(--hdr); }
@@ -435,10 +436,7 @@ header { position: sticky; top: 0; z-index: 20; }
 <button id="btn-save" title="Save to browser storage"><span class="ic"><svg height="16" viewbox="0 0 24 24" width="16"><use href="#i-save"></use></svg></span> Save</button>
 <button id="btn-load" title="Load from browser storage"><span class="ic"><svg height="16" viewbox="0 0 24 24" width="16"><use href="#i-load"></use></svg></span> Load</button>
 
-  <label title="Autosave to browser storage">
-    <input type="checkbox" id="optAutosave" checked> Autosave
-  </label>
-  <span id="autosaveStatus" style="font-size:12px; opacity:.8; margin-left:6px;">Saved</span>
+  <!-- Autosave removed for performance: removed checkbox and status span -->
 <span class="group-title">File</span>
 </div>
 <div class="group" id="grp-view"><div id="view-controls"><label>Font: <select id="font-size"><option value="12px">12</option><option selected="" value="14px">14</option><option value="16px">16</option><option value="18px">18</option></select></label><label>Zoom <input id="zoom-slider" max="1.6" min="0.8" step="0.05" type="range" value="1"/></label></div><span class="group-title">View</span></div>
@@ -530,7 +528,8 @@ function parseMaybeDate(s){ var t=(s==null?'':String(s)).trim(); var d=new Date(
 function isoDate(d){ return d.toISOString().slice(0,10); }
 
 /* ================== State ================== */
-var ROWS=100, COLS=26;
+// Adjust default dimensions: 200 rows and 26 columns
+var ROWS=200, COLS=26;
 var container=null;
 var cells=[];   // grid data
 var active={r:1,c:1};
@@ -1012,7 +1011,8 @@ function attachGlobalShortcuts(){
 
 /* ================== Public-ish API ================== */
 function createGrid(hostEl, rows, cols){
-  container=hostEl; ROWS=rows||1200; COLS=cols||52;
+  // Use provided dimensions or fall back to sensible defaults (200 rows, 26 columns)
+  container=hostEl; ROWS=rows||200; COLS=cols||26;
   var r,c;
   cells=[];
   for(r=0;r<ROWS;r++){ var row=[]; for(c=0;c<COLS;c++) row.push({value:'', style:{}}); cells.push(row); }
@@ -1511,7 +1511,8 @@ function wireHelpModal() {
 }
 
 /* ================== Boot ================== */
-createGrid(document.getElementById('grid-container'), 1200, 52);
+// Create initial grid with 200 rows and 26 columns
+createGrid(document.getElementById('grid-container'), 200, 26);
 var scLeft=document.getElementById('scroll-left'); if (scLeft) (scLeft)&&scLeft.addEventListener('click', function(){ var m=document.querySelector('main'); if(m) m.scrollBy({ left: -200, behavior: 'smooth' }); });
 var scRight=document.getElementById('scroll-right'); if (scRight) (scRight)&&scRight.addEventListener('click', function(){ var m=document.querySelector('main'); if(m) m.scrollBy({ left: 200, behavior: 'smooth' }); });
 
@@ -3325,171 +3326,7 @@ function normalizeDigitsTo0xxx(val){
 })();
 </script>
 
-<script>
-/* ===== Minimal Autosave (localStorage only; no OneDrive) ===== */
-(function(){
-  function sanitize(name){
-    name = String(name||'Sheet 1').trim().replace(/[\\/:*?"<>|]/g,'-').slice(0,64);
-    return name || 'Sheet 1';
-  }
-  function getSheetName(){
-    try { return sanitize(localStorage.getItem('sheetName') || document.title.split(' – ')[0] || 'Sheet 1'); }
-    catch { return 'Sheet 1'; }
-  }
-  function keyMain(){ return 'vs:autosave:' + getSheetName(); }
-  function keyBackup(ts){ return `vs:backup:${getSheetName()}:${ts}`; }
-  function nowISO(){ return new Date().toISOString().replace('T',' ').slice(0,19); }
-  function nowLocal(){ return new Date().toLocaleTimeString('en-GB', {hour12:false, timeZone:'Europe/London'}); }
-
-  // Build a sparse snapshot of the grid
-  function snapshot(){
-    try{
-      var out = [];
-      var rows = (typeof ROWS !== 'undefined' ? ROWS : 1200);
-      var cols = (typeof COLS !== 'undefined' ? COLS : 52);
-      for (var r=1; r<=rows; r++){
-        for (var c=1; c<=cols; c++){
-          var v = (cells[r-1] && cells[r-1][c-1] ? (cells[r-1][c-1].value ?? '') : '');
-          if (v !== '') out.push([r,c,String(v)]);
-        }
-      }
-      return { rows: rows, cols: cols, data: out };
-    } catch(e){
-      console.warn('snapshot() failed', e);
-      return { rows: (typeof ROWS!=='undefined'?ROWS:1200), cols: (typeof COLS!=='undefined'?COLS:52), data: [] };
-    }
-  }
-
-  // Apply a snapshot back into the grid (rebuilds if size differs)
-  function applySnapshot(snap){
-    if (!snap || !snap.rows || !snap.cols) return false;
-    try{
-      var host = document.getElementById('grid-container') || document.querySelector('.grid-host');
-      if (typeof createGrid === 'function' && host){
-        if (typeof ROWS !== 'undefined') ROWS = snap.rows;
-        if (typeof COLS !== 'undefined') COLS = snap.cols;
-        var _defR=1200,_defC=52; var _r=Math.max(_defR, snap.rows||0), _c=Math.max(_defC, snap.cols||0);
-        createGrid(host, _r, _c);
-      }
-      if (Array.isArray(snap.data)){
-        for (var i=0;i<snap.data.length;i++){
-          var t = snap.data[i], r=t[0], c=t[1], v=t[2];
-          if (typeof setCell === 'function') setCell(r,c,v,{skipUndo:true});
-        }
-      }
-      return true;
-    }catch(e){
-      console.warn('applySnapshot() failed', e);
-      return false;
-    }
-  }
-
-  var Autosave = {
-    enabled: true,
-    INTERVAL_MS: 5000,
-    DEBOUNCE_MS: 800,
-    _deb: null,
-    init: function(){
-      var cb = document.getElementById('optAutosave');
-      this.enabled = cb ? cb.checked : true;
-      if (cb) cb.addEventListener('change', ()=>{ this.enabled = cb.checked; if (this.enabled) this.save('toggle-on'); });
-
-      var btnSave = document.getElementById('btnSaveNow');
-      var btnRestore = document.getElementById('btnRestore');
-      if (btnSave) btnSave.addEventListener('click', ()=> this.save('manual'));
-      if (btnRestore) btnRestore.addEventListener('click', ()=> this.loadLatest());
-
-      // Try restoring on first load
-      this.loadLatest();
-
-      // Periodic save
-      setInterval(()=>{ if (this.enabled) this.save('interval'); }, this.INTERVAL_MS);
-
-      // Save on tab hide/close
-      document.addEventListener('visibilitychange', ()=>{
-        if (document.visibilityState === 'hidden' && this.enabled) this.save('hidden');
-      });
-      window.addEventListener('beforeunload', ()=>{ if (this.enabled) try{ this.save('unload'); }catch{}; });
-    },
-    touch: function(){
-      if (!this.enabled) return;
-      clearTimeout(this._deb);
-      this._deb = setTimeout(()=> this.save('debounce'), this.DEBOUNCE_MS);
-    },
-    save: function(why){
-      var status = document.getElementById('autosaveStatus');
-      try{
-        status && (status.textContent = 'Saving…');
-        var snap = snapshot();
-        var json = JSON.stringify(snap);
-        localStorage.setItem(keyMain(), json);
-
-        // Keep a few rolling backups
-        var ts = nowISO().replace(/[: ]/g,'-');
-        localStorage.setItem(keyBackup(ts), json);
-        var keys = Object.keys(localStorage).filter(k => k.startsWith('vs:backup:'+getSheetName()+':')).sort();
-        while (keys.length > 5) { try{ localStorage.removeItem(keys.shift()); }catch{} }
-
-        status && (status.textContent = 'Saved ' + nowLocal());
-        return true;
-      }catch(e){
-        console.warn('Autosave failed', e);
-        status && (status.textContent = 'Save failed');
-        return false;
-      }
-    },
-    loadLatest: function(){
-      try{
-        var raw = localStorage.getItem(keyMain());
-        if (!raw) return false;
-        var ok = applySnapshot(JSON.parse(raw));
-        var status = document.getElementById('autosaveStatus');
-        status && (status.textContent = ok ? ('Restored ' + nowLocal()) : 'Restore failed');
-        return ok;
-      }catch(e){
-        console.warn('Autosave restore failed', e);
-        var status = document.getElementById('autosaveStatus');
-        status && (status.textContent = 'Restore failed');
-        return false;
-      }
-    }
-  };
-
-  // Patch setCell once to trigger debounced autosave
-  if (typeof window.setCell === 'function' && !window.setCell.__autosavePatched){
-    var _orig = window.setCell;
-    window.setCell = function(r,c,val,opts){
-      var res = _orig.apply(this, arguments);
-      try { Autosave.touch(); } catch(e){}
-      return res;
-    };
-    window.setCell.__autosavePatched = true;
-  } else {
-    // If setCell isn't defined yet, try after DOM loaded
-    document.addEventListener('DOMContentLoaded', function(){
-      if (typeof window.setCell === 'function' && !window.setCell.__autosavePatched){
-        var _o = window.setCell;
-        window.setCell = function(r,c,val,opts){
-          var res = _o.apply(this, arguments);
-          try { Autosave.touch(); } catch(e){}
-          return res;
-        };
-        window.setCell.__autosavePatched = true;
-      }
-    });
-  }
-
-  // Expose in case you want manual calls
-  window.Autosave = Autosave;
-
-  // Boot
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ()=> Autosave.init());
-  } else {
-    Autosave.init();
-  }
-})();
-</script>
+<!-- Autosave functionality removed -->
 
 
 <!-- === Always-on Microphone (self-healing) v1 === -->
@@ -3581,8 +3418,6 @@ function normalizeDigitsTo0xxx(val){
         const n = Number(s); return isFinite(n) ? String(n) : null;
       }
       return String(text||'').trim();
-    }
-return String(text||'').trim();
     }
 
     function writeActive(next){
