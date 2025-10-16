@@ -3863,5 +3863,112 @@ function normalizeDigitsTo0xxx(val){
 })();
 </script>
 
+
+<!-- Injected: Hard guards for Numbers-only + proper re-anchor and wrap behavior -->
+<script>
+(function(){
+  // Helper: robust mode getter
+  function __getMode(){
+    var el = document.getElementById("v22-mic-mode") || document.getElementById("mic-mode") || document.getElementById("micMode");
+    return (el && el.value) ? String(el.value).toLowerCase() : "numbers";
+  }
+  // Helper: detect mic listening via class or flags
+  function __isMicActive(){
+    try{
+      var btn = document.getElementById("micBtn") || document.getElementById("mic-start") || document.getElementById("mic-toggle") || document.getElementById("startMic");
+      var on = !!(btn && btn.classList && btn.classList.contains("listening"));
+      return on || !!window._dictationActive || !!window.__dictationRunning;
+    }catch(e){ return !!window._dictationActive; }
+  }
+  // Strict numeric sanitizer (reuse if defined)
+  function __strictToNumberish(text){
+    if (!text) return "";
+    var s = String(text).toLowerCase();
+    s = s
+      .replace(/\b(minus|negative)\b/g, "-")
+      .replace(/\b(plus|positive)\b/g, "")
+      .replace(/\b(comma)\b/g, ".")
+      .replace(/\b(point|dot)\b/g, ".");
+    s = s.replace(/[^0-9.\-]/g, "");
+    s = s.replace(/(?!^)-/g, "");
+    var parts = s.split(".");
+    if (parts.length > 2) s = parts.shift() + "." + parts.join("");
+    if (s.startsWith(".")) s = "0" + s;
+    if (s.endsWith("."))   s = s.slice(0, -1);
+    return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
+  }
+  try { window.toNumberish = __strictToNumberish; } catch(e){}
+
+  // Wrap setCell: enforce numeric-only when mic is active AND mode=='numbers'
+  if (typeof window.setCell === "function" && !window.setCell.__numbersHardGuard){
+    const __origSetCell = window.setCell;
+    window.setCell = function(r, c, val, opts){
+      try{
+        if (__isMicActive() && __getMode() === "numbers"){
+          var clean = __strictToNumberish(val);
+          if (!clean) { return; } // swallow non-numeric writes entirely
+          val = clean;
+        }
+      }catch(e){ /* keep going */ }
+      return __origSetCell.call(this, r, c, val, opts);
+    };
+    window.setCell.__numbersHardGuard = true;
+  }
+
+  // Wrap writeActive as well (in case some paths bypass setCell)
+  if (typeof window.writeActive === "function" && !window.writeActive.__numbersHardGuard){
+    const __origWriteActive = window.writeActive;
+    window.writeActive = function(next){
+      try{
+        if (__isMicActive() && __getMode() === "numbers"){
+          var clean = __strictToNumberish(next);
+          if (!clean) return;
+          next = clean;
+        }
+      }catch(e){}
+      return __origWriteActive.call(this, next);
+    };
+    window.writeActive.__numbersHardGuard = true;
+  }
+
+  // Ensure re-anchor on mic start & direction change for BOTH block structs
+  function __anchorFromActive(){
+    var a = window.active || {r:1, c:1};
+    // legacy block
+    window.block = window.block || {};
+    window.block.startR = a.r; window.block.startC = a.c; window.block.count = 0;
+    // compat block
+    window.__dictBlock = window.__dictBlock || {};
+    window.__dictBlock.startR = a.r; window.__dictBlock.startC = a.c; window.__dictBlock.count = 0;
+  }
+
+  function __bindAnchors(){
+    var micBtn = document.getElementById("micBtn") || document.getElementById("mic-start") || document.getElementById("mic-toggle") || document.getElementById("startMic");
+    if (micBtn && !micBtn.__hardAnchor){
+      micBtn.addEventListener("click", function(){
+        // if starting, re-anchor just after click; safe even if stopping
+        setTimeout(__anchorFromActive, 0);
+      }, true);
+      micBtn.__hardAnchor = true;
+    }
+    var dirSel = document.getElementById("direction") || document.getElementById("voice-direction");
+    if (dirSel && !dirSel.__hardAnchor){
+      dirSel.addEventListener("change", function(){ __anchorFromActive(); }, true);
+      dirSel.__hardAnchor = true;
+    }
+  }
+
+  if (document.readyState === "complete" || document.readyState === "interactive"){
+    __bindAnchors();
+    setTimeout(__bindAnchors, 400);
+  } else {
+    document.addEventListener("DOMContentLoaded", function(){
+      __bindAnchors();
+      setTimeout(__bindAnchors, 400);
+    });
+  }
+})();
+</script>
+
 </body>
 </html>
