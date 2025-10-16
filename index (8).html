@@ -3970,5 +3970,232 @@ function normalizeDigitsTo0xxx(val){
 })();
 </script>
 
+
+<script id="mic-v3">
+(function(){
+  // Hard-disable legacy autostart if any
+  try {
+    window.__DISABLE_LEGACY_MIC__ = true;
+    window.startMicAlways = function(){};
+    window.stopMicAlways = function(){};
+  } catch(_){}
+
+  function getEl(id1, id2, id3){
+    return document.getElementById(id1) || (id2 && document.getElementById(id2)) || (id3 && document.getElementById(id3)) || null;
+  }
+
+  function sanitizeNumbersFromTranscript(raw){
+    // Returns an array of sanitized numeric strings, or [] if none.
+    if (!raw) return [];
+    let s = String(raw).toLowerCase();
+
+    // Normalize decimal words to '.'
+    s = s.replace(/\b(comma|point|dot)\b/g, '.');
+
+    // Join "300 . 75" or "300 .75" -> "300.75"
+    s = s.replace(/(\d)\s*\.\s*(\d)/g, '$1.$2');
+
+    // If there are no digits at all, we ignore this utterance entirely.
+    if (!/\d/.test(s)) return [];
+
+    // Keep digits, minus, dot; turn everything else into space
+    s = s.replace(/[^0-9.\-]/g, ' ');
+
+    // Collapse repeated minus signs within tokens (keep leading minus only later)
+    s = s.replace(/(?!^)-/g, ' ');
+
+    // Extract all numbers (allow one optional decimal point)
+    const found = [];
+    // Before extracting, also collapse tokens like "123.45.67" to first valid chunk per token
+    s.replace(/-?\d+(?:\.\d+)?/g, (m) => { found.push(m); return m; });
+
+    // Optional: inline 0.xxx scaling when toggle is ON and value is pure digits (no dot)
+    function maybeScale(val){
+      try{
+        const cb = document.getElementById('optScaleDigits');
+        const enabled = cb ? !!cb.checked : false;
+        if (!enabled) return val;
+        if (/^-?\d+$/.test(val)) {
+          const neg = val[0] === '-' ? '-' : '';
+          const digits = val.replace(/\D/g, '');
+          if (digits) return neg + '0.' + digits;
+        }
+      }catch(_){}
+      return val;
+    }
+
+    return found.map(maybeScale).filter(Boolean);
+  }
+
+  function install(){
+    const micBtn = getEl('micBtn','mic-start','mic-toggle') || getEl('startMic');
+    if (!micBtn) return;
+
+    // Replace mic button with a clone to remove any pre-attached listeners
+    const clone = micBtn.cloneNode(true);
+    micBtn.parentNode.replaceChild(clone, micBtn);
+    const btn = clone;
+
+    // Status element
+    let micStatus = document.getElementById('micStatus');
+    if (!micStatus){
+      micStatus = document.createElement('span');
+      micStatus.id = 'micStatus';
+      micStatus.textContent = 'Mic off';
+      btn.insertAdjacentElement('afterend', micStatus);
+    }
+
+    // Controls
+    const dirSel  = getEl('direction','voice-direction');
+    const autoChk = getEl('autoAdvance','auto-advance');
+    const limitEl = getEl('advanceLimit');
+    const modeSel = getEl('v22-mic-mode','mic-mode','micMode');
+    if (modeSel) { try { modeSel.value = 'numbers'; } catch(_){ } }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR){
+      btn.disabled = true;
+      micStatus.textContent = 'Speech recognition not supported';
+      return;
+    }
+
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false; // final-only reduces partial glitches
+    rec.lang = 'en-US';
+    window.__V3_MIC__ = rec;
+
+    let listening = false;
+    const state = { anchorR: null, anchorC: null, count: 0 };
+
+    function resetAnchor(){
+      if (window.active && typeof window.active.r === 'number'){
+        state.anchorR = window.active.r;
+        state.anchorC = window.active.c;
+        state.count = 0;
+      }
+    }
+
+    function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+
+    function advance(){
+      if (!(autoChk && autoChk.checked)) return;
+      const ROWS = window.ROWS || 100, COLS = window.COLS || 26;
+      const N = Math.max(1, parseInt((limitEl && limitEl.value) || '1', 10));
+      const dir = (dirSel && dirSel.value) || 'right';
+      if (state.anchorR == null || state.anchorC == null) resetAnchor();
+      let r = window.active ? window.active.r : 1;
+      let c = window.active ? window.active.c : 1;
+
+      if (dir === 'right'){
+        if (state.count < N - 1){
+          state.count++;
+          c = clamp(c + 1, 1, COLS);
+        } else {
+          state.count = 0;
+          r = clamp(r + 1, 1, ROWS);
+          c = state.anchorC; // wrap back to anchor column, not column 1
+        }
+      } else if (dir === 'down'){
+        if (state.count < N - 1){
+          state.count++;
+          r = clamp(r + 1, 1, ROWS);
+        } else {
+          state.count = 0;
+          c = clamp(c + 1, 1, COLS);
+          r = state.anchorR;
+        }
+      } else if (dir === 'left'){
+        if (state.count < N - 1){
+          state.count++;
+          c = clamp(c - 1, 1, COLS);
+        } else {
+          state.count = 0;
+          r = clamp(r - 1, 1, ROWS);
+          c = state.anchorC;
+        }
+      } else if (dir === 'up'){
+        if (state.count < N - 1){
+          state.count++;
+          r = clamp(r - 1, 1, ROWS);
+        } else {
+          state.count = 0;
+          c = clamp(c - 1, 1, COLS);
+          r = state.anchorR;
+        }
+      }
+
+      if (typeof window.setActive === 'function'){
+        window.setActive(r, c, true);
+      } else {
+        if (window.active){ window.active.r = r; window.active.c = c; }
+      }
+    }
+
+    function writeValue(val){
+      try{
+        window._dictationActive = true;
+        if (typeof window.setCell === 'function' && window.active){
+          window.setCell(window.active.r, window.active.c, val);
+        } else if (typeof window.writeActive === 'function'){
+          window.writeActive(String(val));
+        } else {
+          const el = document.activeElement;
+          if (el && el.tagName === 'INPUT' && el.closest('.cell')){
+            el.value = String(val);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+      } finally { window._dictationActive = false; }
+    }
+
+    rec.onstart = function(){
+      listening = true;
+      btn.classList.add('listening');
+      micStatus.textContent = 'Listening...';
+      resetAnchor();
+    };
+    rec.onend = function(){
+      listening = false;
+      btn.classList.remove('listening');
+      micStatus.textContent = 'Mic off';
+    };
+    rec.onerror = function(e){
+      micStatus.textContent = 'Error: ' + (e && e.error ? e.error : 'unknown');
+    };
+    rec.onresult = function(event){
+      let chunk = '';
+      for (let i = event.resultIndex; i < event.results.length; i++){
+        const res = event.results[i];
+        if (res.isFinal && res[0] && res[0].transcript){
+          chunk += res[0].transcript + ' ';
+        }
+      }
+      if (!chunk.trim()) return;
+      const nums = sanitizeNumbersFromTranscript(chunk);
+      if (!nums.length) return; // be silent for non-numeric utterances
+      for (const n of nums){
+        writeValue(n);
+        advance();
+      }
+    };
+
+    if (dirSel) dirSel.addEventListener('change', resetAnchor, true);
+
+    btn.addEventListener('click', function(){
+      if (listening) { try { rec.stop(); } catch(_){ } return; }
+      resetAnchor();
+      try { rec.start(); } catch(_){ }
+    }, true);
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive'){
+    setTimeout(install, 0);
+  } else {
+    document.addEventListener('DOMContentLoaded', install);
+  }
+})();
+</script>
+
 </body>
 </html>
