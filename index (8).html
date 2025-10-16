@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 
 <html lang="en">
@@ -3729,5 +3728,140 @@ function normalizeDigitsTo0xxx(val){
     window.LOCAL_STT_ENDPOINT = "http://localhost:8000/api/transcribe";
   }
 </script>
+
+<!-- Injected: Single-pipeline mic overrides (Numbers-only + anchor reset) -->
+<script>
+(function(){
+  // --- Strict Numbers-only sanitizer ---
+  function __strictToNumberish(text){
+    if (!text) return "";
+    var s = String(text).toLowerCase();
+    // spoken tokens to symbols
+    s = s
+      .replace(/\b(minus|negative)\b/g, "-")
+      .replace(/\b(plus|positive)\b/g, "")
+      .replace(/\b(comma)\b/g, ".")
+      .replace(/\b(point|dot)\b/g, ".");
+    // keep digits, dot, hyphen
+    s = s.replace(/[^0-9.\-]/g, "");
+    // only one leading minus
+    s = s.replace(/(?!^)-/g, "");
+    // collapse multiple dots
+    var parts = s.split(".");
+    if (parts.length > 2) s = parts.shift() + "." + parts.join("");
+    // normalize .5 and 7.
+    if (s.startsWith(".")) s = "0" + s;
+    if (s.endsWith("."))   s = s.slice(0, -1);
+    return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
+  }
+  // Export as the canonical toNumberish
+  try { window.toNumberish = __strictToNumberish; } catch(e){}
+
+  // Helpers to get controls safely
+  function __getMode(){
+    var el = document.getElementById("v22-mic-mode") || document.getElementById("mic-mode") || document.getElementById("mode");
+    return (el && el.value) ? String(el.value).toLowerCase() : "numbers";
+  }
+  function __getAutoAdvanceCheckbox(){
+    return document.getElementById("autoAdvance") || document.getElementById("auto-advance");
+  }
+  function __activeCell(){
+    try {
+      if (typeof window.getActiveCell === "function") return window.getActiveCell();
+      // fallback if you expose globals r,c
+      if (typeof window.activeR === "number" && typeof window.activeC === "number") return {r: window.activeR, c: window.activeC};
+    } catch(e){}
+    return null;
+  }
+
+  function __writeValueToActiveCell(val){
+    if (typeof window.writeActive === "function") { window.writeActive(val); return true; }
+    if (typeof window.setActiveCellValue === "function") { window.setActiveCellValue(val); return true; }
+    if (typeof window.setCell === "function" && __activeCell()){
+      var a = __activeCell();
+      try { window.setCell(a.r, a.c, val); return true; } catch(e){}
+    }
+    return false;
+  }
+
+  function __advance(){
+    if (typeof window.advanceWithLimit === "function"){ window.advanceWithLimit(); return true; }
+    if (typeof window.advanceActive === "function"){ window.advanceActive(); return true; }
+    // Very conservative fallback: move right by calling a moveRight if present
+    if (typeof window.moveRight === "function"){ window.moveRight(); return true; }
+    return false;
+  }
+
+  function __resetBlockAnchorFromActive(){
+    if (!window.block) return;
+    var a = __activeCell();
+    if (a && typeof a.r === "number" && typeof a.c === "number"){
+      window.block.startR = a.r;
+      window.block.startC = a.c;
+    }
+    window.block.count = 0;
+  }
+
+  function __install(){
+    // 1) Patch recognizer's onresult to enforce numbers-only when mode == "numbers"
+    var rec = window.rec || window._rec || window.recognizer || window._recognizer;
+    if (rec && !rec.__numbersPatched){
+      var handler = function(ev){
+        window._dictationActive = true;
+        try{
+          for (var i = ev.resultIndex; i < ev.results.length; i++){
+            var res = ev.results[i];
+            if (!res.isFinal) continue;
+            var raw = (res[0] && res[0].transcript ? res[0].transcript : "").trim();
+            var mode = __getMode();
+            var val  = (mode === "numbers" || mode === "digits") ? __strictToNumberish(raw) : raw;
+            if (!val) continue;  // numbers mode writes nothing if sanitization empties it
+            if (!__writeValueToActiveCell(String(val))) { /* no-op if cannot find writer */ }
+            var auto = __getAutoAdvanceCheckbox();
+            if (auto && auto.checked) __advance();
+          }
+        } finally {
+          window._dictationActive = false;
+        }
+      };
+      try { rec.onresult = handler; } catch(e){}
+      rec.__numbersPatched = true;
+    }
+
+    // 2) Reset block anchor when mic is (re)started
+    var micBtn = document.getElementById("micBtn") ||
+                 document.getElementById("mic-start") ||
+                 document.getElementById("mic-toggle") ||
+                 document.getElementById("startMic");
+    if (micBtn && !micBtn.__anchorResetBound){
+      micBtn.addEventListener("click", function(){
+        // Heuristic: if this click toggles to "listening", reset the anchor
+        setTimeout(__resetBlockAnchorFromActive, 0);
+      }, true);
+      micBtn.__anchorResetBound = true;
+    }
+
+    // 3) Reset block when direction changes
+    var dirSel = document.getElementById("direction") || document.getElementById("voice-direction");
+    if (dirSel && !dirSel.__resetBound){
+      dirSel.addEventListener("change", function(){ __resetBlockAnchorFromActive(); }, true);
+      dirSel.__resetBound = true;
+    }
+  }
+
+  // Try now and again after DOM is ready to catch lazy init
+  if (document.readyState === "complete" || document.readyState === "interactive"){
+    setTimeout(__install, 0);
+    setTimeout(__install, 500);
+    setTimeout(__install, 1500);
+  } else {
+    document.addEventListener("DOMContentLoaded", function(){
+      __install();
+      setTimeout(__install, 500);
+    });
+  }
+})();
+</script>
+
 </body>
 </html>
