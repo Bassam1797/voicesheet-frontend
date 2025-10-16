@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 
 <html lang="en">
@@ -3406,34 +3407,18 @@ function normalizeDigitsTo0xxx(val){
     }
 
     function toNumberish(text){
-  if (!text) return "";
-  let s = String(text).toLowerCase();
-
-  // Map common spoken tokens to symbols
-  s = s
-    .replace(/\b(minus|negative)\b/g, "-")
-    .replace(/\b(plus|positive)\b/g, "")       // ignore spoken plus
-    .replace(/\b(comma)\b/g, ".")
-    .replace(/\b(point|dot)\b/g, ".");
-
-  // Strip everything except digits, dots, and hyphens
-  s = s.replace(/[^0-9.\-]/g, "");
-
-  // Enforce one leading minus only
-  s = s.replace(/(?!^)-/g, "");
-
-  // Collapse multiple dots to a single decimal point
-  const parts = s.split(".");
-  if (parts.length > 2) s = parts.shift() + "." + parts.join("");
-
-  // Normalize leading/trailing dot
-  if (s.startsWith(".")) s = "0" + s;
-  if (s.endsWith("."))   s = s.slice(0, -1);
-
-  // Final guard: valid numeric or reject
-  return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
-}
-return String(text||'').trim();
+      if(!text) return null;
+      let s = String(text).toLowerCase().trim();
+      s = s.replace(/comma/g,'.').replace(/\s+(point|dot)\s+/g,'.');
+      if(/[0-9]/.test(s)){
+        // STRICT: keep digits and dots only; ignore hyphens entirely
+        s = s.replace(/[^0-9.]/g,'');
+        const parts = s.split('.'); if (parts.length>2) s = parts[0]+'.'+parts.slice(1).join('');
+        if (/^\d+\.$/.test(s)) s = s.slice(0,-1);
+        if(!s || s==='.') return null;
+        const n = Number(s); return isFinite(n) ? String(n) : null;
+      }
+      return String(text||'').trim();
     }
 
     function writeActive(next){
@@ -3655,27 +3640,17 @@ return String(text||'').trim();
     };
     rec.onerror = function(e){ if(e && e.error && e.error!=="aborted" && e.error!=="no-speech"){ console.warn("Speech error:", e.error); } };
     rec.onresult = function(ev){
-  window._dictationActive = true; // mark dictation to cooperate with any 0.xxx normalization
-  try{
-    for (var i = ev.resultIndex; i < ev.results.length; i++){
-      var res = ev.results[i];
-      if (!res.isFinal) continue;
-
-      var raw  = (res[0] && res[0].transcript ? res[0].transcript : "").trim();
-      var mode = modeSel ? modeSel.value : "numbers";
-      var val  = (mode === "numbers") ? toNumberish(raw) : raw;
-
-      if (!val) continue; // numbers mode writes nothing if sanitized to empty
-
-      writeActive(String(val));
-      if (autoChk && autoChk.checked){
-        advanceWithLimit();
+  window._dictationActive = true;
+      for(var i=ev.resultIndex;i<ev.results.length;i++){
+        var res = ev.results[i]; if(!res.isFinal) continue;
+        var raw = (res[0]&&res[0].transcript?res[0].transcript:"").trim();
+        var mode = modeSel ? modeSel.value : "numbers";
+        var val = (mode==="numbers") ? toNumberish(raw) : raw;
+        if(val==null || val==="") return;
+        writeActive(String(val));
+        if(autoChk && autoChk.checked){ advanceWithLimit(); }
       }
-    }
-  } finally {
-    window._dictationActive = false; // ensure no leakage into manual edits
-  }
-};
+    };
     return rec;
   }
 
@@ -3692,34 +3667,16 @@ return String(text||'').trim();
   }
 
   function toNumberish(text){
-  if (!text) return "";
-  let s = String(text).toLowerCase();
-
-  // Map common spoken tokens to symbols
-  s = s
-    .replace(/\b(minus|negative)\b/g, "-")
-    .replace(/\b(plus|positive)\b/g, "")       // ignore spoken plus
-    .replace(/\b(comma)\b/g, ".")
-    .replace(/\b(point|dot)\b/g, ".");
-
-  // Strip everything except digits, dots, and hyphens
-  s = s.replace(/[^0-9.\-]/g, "");
-
-  // Enforce one leading minus only
-  s = s.replace(/(?!^)-/g, "");
-
-  // Collapse multiple dots to a single decimal point
-  const parts = s.split(".");
-  if (parts.length > 2) s = parts.shift() + "." + parts.join("");
-
-  // Normalize leading/trailing dot
-  if (s.startsWith(".")) s = "0" + s;
-  if (s.endsWith("."))   s = s.slice(0, -1);
-
-  // Final guard: valid numeric or reject
-  return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
-}
-var words={"zero":0,"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,"nineteen":19,"twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60,"seventy":70,"eighty":80,"ninety":90};
+    if(!text) return null;
+    var s=String(text).toLowerCase().trim();
+    s=s.replace(/comma/g,".").replace(/\s+(point|dot)\s+/g,".");
+    if(/[0-9]/.test(s)){
+      s=s.replace(/[^0-9.\-]/g,""); var p=s.split("."); if(p.length>2) s=p[0]+"."+p.slice(1).join("");
+      if(/^\-?\d+\.$/.test(s)) s=s.slice(0,-1);
+      if(!s || s==="-" || s===".") return null;
+      var n=Number(s); return isFinite(n)?String(n):null;
+    }
+    var words={"zero":0,"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,"nineteen":19,"twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60,"seventy":70,"eighty":80,"ninety":90};
     var neg=false; s=s.replace(/\band\b/g," "); if(/\bminus\b|\bnegative\b/.test(s)){ neg=true; s=s.replace(/\b(minus|negative)\b/g," "); }
     var total=0; s.split(/[\s\-]+/).forEach(function(t){ if(words[t]!=null) total+=words[t]; });
     if(total===0 && !/zero/.test(s)) return null; if(neg) total=-total; return String(total);
