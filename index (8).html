@@ -3864,15 +3864,17 @@ function normalizeDigitsTo0xxx(val){
 </script>
 
 
-<!-- Injected: Hard guards for Numbers-only + proper re-anchor and wrap behavior -->
+<!-- Injected v3: Numbers-only hard guard + Digits→0.xxx aggregator (single cell) + re-anchor -->
 <script>
 (function(){
-  // Helper: robust mode getter
+  /* ===== Utilities ===== */
   function __getMode(){
     var el = document.getElementById("v22-mic-mode") || document.getElementById("mic-mode") || document.getElementById("micMode");
     return (el && el.value) ? String(el.value).toLowerCase() : "numbers";
   }
-  // Helper: detect mic listening via class or flags
+  function __getAutoAdvanceCheckbox(){
+    return document.getElementById("autoAdvance") || document.getElementById("auto-advance");
+  }
   function __isMicActive(){
     try{
       var btn = document.getElementById("micBtn") || document.getElementById("mic-start") || document.getElementById("mic-toggle") || document.getElementById("startMic");
@@ -3880,7 +3882,6 @@ function normalizeDigitsTo0xxx(val){
       return on || !!window._dictationActive || !!window.__dictationRunning;
     }catch(e){ return !!window._dictationActive; }
   }
-  // Strict numeric sanitizer (reuse if defined)
   function __strictToNumberish(text){
     if (!text) return "";
     var s = String(text).toLowerCase();
@@ -3897,30 +3898,56 @@ function normalizeDigitsTo0xxx(val){
     if (s.endsWith("."))   s = s.slice(0, -1);
     return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
   }
-  try { window.toNumberish = __strictToNumberish; } catch(e){}
+  function __digitsOnly(text){ return String(text || "").replace(/[^0-9]/g, ""); }
+  function __writeActive(val){
+    if (typeof window.writeActive === "function"){ window.writeActive(val); return true; }
+    if (typeof window.setCell === "function" && window.active){
+      try { window.setCell(window.active.r, window.active.c, val); return true; } catch(e){}
+    }
+    return false;
+  }
+  function __advance(){
+    if (typeof window.advanceWithLimit === "function") return void window.advanceWithLimit();
+    if (typeof window.advanceActive === "function")    return void window.advanceActive();
+    if (typeof window.moveRight === "function")        return void window.moveRight();
+  }
+  function __isDigitsToDecimalEnabled(){
+    var ids = ["digits-0xxx","digits0xxx","digitsToDecimal","digits_to_decimal","digits"];
+    for (var i=0;i<ids.length;i++){
+      var el = document.getElementById(ids[i]);
+      if (el && el.checked) return true;
+    }
+    var boxes = document.querySelectorAll('input[type="checkbox"]');
+    for (var j=0;j<boxes.length;j++){
+      var b = boxes[j];
+      if (!b.checked) continue;
+      var lab = (b.id && document.querySelector('label[for="'+b.id+'"]')) || b.closest('label');
+      var txt = ((lab && lab.textContent) || "") + " " + (b.title || "");
+      if (/digits.*0\.?x{3}|0\.xxx|digits/i.test(txt)) return true;
+    }
+    return false;
+  }
 
-  // Wrap setCell: enforce numeric-only when mic is active AND mode=='numbers'
+  /* ===== Hard numbers-only at write boundary ===== */
   if (typeof window.setCell === "function" && !window.setCell.__numbersHardGuard){
     const __origSetCell = window.setCell;
     window.setCell = function(r, c, val, opts){
       try{
-        if (__isMicActive() && __getMode() === "numbers"){
+        if (__isMicActive() && (__getMode() === "numbers" || __getMode() === "digits")){
           var clean = __strictToNumberish(val);
-          if (!clean) { return; } // swallow non-numeric writes entirely
+          if (!clean) { return; }
           val = clean;
         }
-      }catch(e){ /* keep going */ }
+      }catch(e){}
       return __origSetCell.call(this, r, c, val, opts);
     };
     window.setCell.__numbersHardGuard = true;
   }
-
-  // Wrap writeActive as well (in case some paths bypass setCell)
   if (typeof window.writeActive === "function" && !window.writeActive.__numbersHardGuard){
     const __origWriteActive = window.writeActive;
     window.writeActive = function(next){
       try{
-        if (__isMicActive() && __getMode() === "numbers"){
+        if (__isMicActive() && (__getMode() === "numbers" || __getMode() === "digits")){
           var clean = __strictToNumberish(next);
           if (!clean) return;
           next = clean;
@@ -3931,24 +3958,18 @@ function normalizeDigitsTo0xxx(val){
     window.writeActive.__numbersHardGuard = true;
   }
 
-  // Ensure re-anchor on mic start & direction change for BOTH block structs
+  /* ===== Re-anchor block on mic start + direction change ===== */
   function __anchorFromActive(){
-    var a = window.active || {r:1, c:1};
-    // legacy block
+    var a = window.active || (window.getActiveCell && window.getActiveCell()) || {r:1,c:1};
     window.block = window.block || {};
     window.block.startR = a.r; window.block.startC = a.c; window.block.count = 0;
-    // compat block
     window.__dictBlock = window.__dictBlock || {};
     window.__dictBlock.startR = a.r; window.__dictBlock.startC = a.c; window.__dictBlock.count = 0;
   }
-
   function __bindAnchors(){
     var micBtn = document.getElementById("micBtn") || document.getElementById("mic-start") || document.getElementById("mic-toggle") || document.getElementById("startMic");
     if (micBtn && !micBtn.__hardAnchor){
-      micBtn.addEventListener("click", function(){
-        // if starting, re-anchor just after click; safe even if stopping
-        setTimeout(__anchorFromActive, 0);
-      }, true);
+      micBtn.addEventListener("click", function(){ setTimeout(__anchorFromActive, 0); }, true);
       micBtn.__hardAnchor = true;
     }
     var dirSel = document.getElementById("direction") || document.getElementById("voice-direction");
@@ -3958,241 +3979,55 @@ function normalizeDigitsTo0xxx(val){
     }
   }
 
+  /* ===== Aggregator for Digits→0.xxx ===== */
+  function __installAggregator(){
+    var rec = window.rec || window._rec || window.recognizer || window._recognizer;
+    if (!rec || rec.__digitsAggregatorPatched) return;
+    rec.onresult = function(ev){
+      window._dictationActive = true;
+      try{
+        var mode = __getMode();
+        var auto = __getAutoAdvanceCheckbox();
+        var combineDigits = __isDigitsToDecimalEnabled() && (mode === "numbers" || mode === "digits");
+
+        if (combineDigits){
+          var digits = "";
+          for (var i=ev.resultIndex; i<ev.results.length; i++){
+            var r = ev.results[i];
+            if (!r.isFinal) continue;
+            var raw = (r[0] && r[0].transcript ? r[0].transcript : "");
+            var num = __strictToNumberish(raw);
+            digits += __digitsOnly(num);
+          }
+          if (digits){
+            __writeActive("0." + digits);
+            if (auto && auto.checked) __advance();
+          }
+          return;
+        }
+
+        // Fallback: per-fragment writes with numbers-only
+        for (var j=ev.resultIndex; j<ev.results.length; j++){
+          var res = ev.results[j];
+          if (!res.isFinal) continue;
+          var raw2 = (res[0] && res[0].transcript ? res[0].transcript : "").trim();
+          var val  = (mode === "numbers" || mode === "digits") ? __strictToNumberish(raw2) : raw2;
+          if (!val) continue;
+          __writeActive(String(val));
+          if (auto && auto.checked) __advance();
+        }
+      } finally {
+        window._dictationActive = false;
+      }
+    };
+    rec.__digitsAggregatorPatched = true;
+  }
+
   if (document.readyState === "complete" || document.readyState === "interactive"){
-    __bindAnchors();
+    __bindAnchors(); __installAggregator();
     setTimeout(__bindAnchors, 400);
   } else {
-    document.addEventListener("DOMContentLoaded", function(){
-      __bindAnchors();
-      setTimeout(__bindAnchors, 400);
-    });
-  }
-})();
-</script>
-
-
-<script id="mic-v3">
-(function(){
-  // Hard-disable legacy autostart if any
-  try {
-    window.__DISABLE_LEGACY_MIC__ = true;
-    window.startMicAlways = function(){};
-    window.stopMicAlways = function(){};
-  } catch(_){}
-
-  function getEl(id1, id2, id3){
-    return document.getElementById(id1) || (id2 && document.getElementById(id2)) || (id3 && document.getElementById(id3)) || null;
-  }
-
-  function sanitizeNumbersFromTranscript(raw){
-    // Returns an array of sanitized numeric strings, or [] if none.
-    if (!raw) return [];
-    let s = String(raw).toLowerCase();
-
-    // Normalize decimal words to '.'
-    s = s.replace(/\b(comma|point|dot)\b/g, '.');
-
-    // Join "300 . 75" or "300 .75" -> "300.75"
-    s = s.replace(/(\d)\s*\.\s*(\d)/g, '$1.$2');
-
-    // If there are no digits at all, we ignore this utterance entirely.
-    if (!/\d/.test(s)) return [];
-
-    // Keep digits, minus, dot; turn everything else into space
-    s = s.replace(/[^0-9.\-]/g, ' ');
-
-    // Collapse repeated minus signs within tokens (keep leading minus only later)
-    s = s.replace(/(?!^)-/g, ' ');
-
-    // Extract all numbers (allow one optional decimal point)
-    const found = [];
-    // Before extracting, also collapse tokens like "123.45.67" to first valid chunk per token
-    s.replace(/-?\d+(?:\.\d+)?/g, (m) => { found.push(m); return m; });
-
-    // Optional: inline 0.xxx scaling when toggle is ON and value is pure digits (no dot)
-    function maybeScale(val){
-      try{
-        const cb = document.getElementById('optScaleDigits');
-        const enabled = cb ? !!cb.checked : false;
-        if (!enabled) return val;
-        if (/^-?\d+$/.test(val)) {
-          const neg = val[0] === '-' ? '-' : '';
-          const digits = val.replace(/\D/g, '');
-          if (digits) return neg + '0.' + digits;
-        }
-      }catch(_){}
-      return val;
-    }
-
-    return found.map(maybeScale).filter(Boolean);
-  }
-
-  function install(){
-    const micBtn = getEl('micBtn','mic-start','mic-toggle') || getEl('startMic');
-    if (!micBtn) return;
-
-    // Replace mic button with a clone to remove any pre-attached listeners
-    const clone = micBtn.cloneNode(true);
-    micBtn.parentNode.replaceChild(clone, micBtn);
-    const btn = clone;
-
-    // Status element
-    let micStatus = document.getElementById('micStatus');
-    if (!micStatus){
-      micStatus = document.createElement('span');
-      micStatus.id = 'micStatus';
-      micStatus.textContent = 'Mic off';
-      btn.insertAdjacentElement('afterend', micStatus);
-    }
-
-    // Controls
-    const dirSel  = getEl('direction','voice-direction');
-    const autoChk = getEl('autoAdvance','auto-advance');
-    const limitEl = getEl('advanceLimit');
-    const modeSel = getEl('v22-mic-mode','mic-mode','micMode');
-    if (modeSel) { try { modeSel.value = 'numbers'; } catch(_){ } }
-
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR){
-      btn.disabled = true;
-      micStatus.textContent = 'Speech recognition not supported';
-      return;
-    }
-
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = false; // final-only reduces partial glitches
-    rec.lang = 'en-US';
-    window.__V3_MIC__ = rec;
-
-    let listening = false;
-    const state = { anchorR: null, anchorC: null, count: 0 };
-
-    function resetAnchor(){
-      if (window.active && typeof window.active.r === 'number'){
-        state.anchorR = window.active.r;
-        state.anchorC = window.active.c;
-        state.count = 0;
-      }
-    }
-
-    function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
-
-    function advance(){
-      if (!(autoChk && autoChk.checked)) return;
-      const ROWS = window.ROWS || 100, COLS = window.COLS || 26;
-      const N = Math.max(1, parseInt((limitEl && limitEl.value) || '1', 10));
-      const dir = (dirSel && dirSel.value) || 'right';
-      if (state.anchorR == null || state.anchorC == null) resetAnchor();
-      let r = window.active ? window.active.r : 1;
-      let c = window.active ? window.active.c : 1;
-
-      if (dir === 'right'){
-        if (state.count < N - 1){
-          state.count++;
-          c = clamp(c + 1, 1, COLS);
-        } else {
-          state.count = 0;
-          r = clamp(r + 1, 1, ROWS);
-          c = state.anchorC; // wrap back to anchor column, not column 1
-        }
-      } else if (dir === 'down'){
-        if (state.count < N - 1){
-          state.count++;
-          r = clamp(r + 1, 1, ROWS);
-        } else {
-          state.count = 0;
-          c = clamp(c + 1, 1, COLS);
-          r = state.anchorR;
-        }
-      } else if (dir === 'left'){
-        if (state.count < N - 1){
-          state.count++;
-          c = clamp(c - 1, 1, COLS);
-        } else {
-          state.count = 0;
-          r = clamp(r - 1, 1, ROWS);
-          c = state.anchorC;
-        }
-      } else if (dir === 'up'){
-        if (state.count < N - 1){
-          state.count++;
-          r = clamp(r - 1, 1, ROWS);
-        } else {
-          state.count = 0;
-          c = clamp(c - 1, 1, COLS);
-          r = state.anchorR;
-        }
-      }
-
-      if (typeof window.setActive === 'function'){
-        window.setActive(r, c, true);
-      } else {
-        if (window.active){ window.active.r = r; window.active.c = c; }
-      }
-    }
-
-    function writeValue(val){
-      try{
-        window._dictationActive = true;
-        if (typeof window.setCell === 'function' && window.active){
-          window.setCell(window.active.r, window.active.c, val);
-        } else if (typeof window.writeActive === 'function'){
-          window.writeActive(String(val));
-        } else {
-          const el = document.activeElement;
-          if (el && el.tagName === 'INPUT' && el.closest('.cell')){
-            el.value = String(val);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-        }
-      } finally { window._dictationActive = false; }
-    }
-
-    rec.onstart = function(){
-      listening = true;
-      btn.classList.add('listening');
-      micStatus.textContent = 'Listening...';
-      resetAnchor();
-    };
-    rec.onend = function(){
-      listening = false;
-      btn.classList.remove('listening');
-      micStatus.textContent = 'Mic off';
-    };
-    rec.onerror = function(e){
-      micStatus.textContent = 'Error: ' + (e && e.error ? e.error : 'unknown');
-    };
-    rec.onresult = function(event){
-      let chunk = '';
-      for (let i = event.resultIndex; i < event.results.length; i++){
-        const res = event.results[i];
-        if (res.isFinal && res[0] && res[0].transcript){
-          chunk += res[0].transcript + ' ';
-        }
-      }
-      if (!chunk.trim()) return;
-      const nums = sanitizeNumbersFromTranscript(chunk);
-      if (!nums.length) return; // be silent for non-numeric utterances
-      for (const n of nums){
-        writeValue(n);
-        advance();
-      }
-    };
-
-    if (dirSel) dirSel.addEventListener('change', resetAnchor, true);
-
-    btn.addEventListener('click', function(){
-      if (listening) { try { rec.stop(); } catch(_){ } return; }
-      resetAnchor();
-      try { rec.start(); } catch(_){ }
-    }, true);
-  }
-
-  if (document.readyState === 'complete' || document.readyState === 'interactive'){
-    setTimeout(install, 0);
-  } else {
-    document.addEventListener('DOMContentLoaded', install);
+    document.addEventListener("DOMContentLoaded", function(){ __bindAnchors(); __installAggregator(); setTimeout(__bindAnchors, 400); });
   }
 })();
 </script>
