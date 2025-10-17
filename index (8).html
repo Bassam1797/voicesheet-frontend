@@ -3956,97 +3956,122 @@ function normalizeDigitsTo0xxx(val){
 </script>
 
 
-<!-- Injected v6: definitive mic anchor + wrap logic (Right wraps to same start column) -->
+<!-- Injected v7: strict digits-required sanitizer + reliable mic re-anchor on start -->
 <script>
 (function(){
-  var dirSel  = document.getElementById('direction') || document.getElementById('voice-direction');
-  var limitEl = document.getElementById('advanceLimit');
-  var autoChk = document.getElementById('autoAdvance') || document.getElementById('auto-advance');
-  var micBtn  = document.getElementById('micBtn') || document.getElementById('mic-start') || document.getElementById('mic-toggle') || document.getElementById('startMic');
-
-  // Shared dictation state
-  window.__EVS = window.__EVS || { baseRow:null, baseCol:null, count:0 };
-
-  function readDir(){ return (dirSel && dirSel.value ? String(dirSel.value).toLowerCase() : 'right'); }
-  function readLimit(){
-    var v = (limitEl && limitEl.value) ? parseInt(limitEl.value, 10) : 3;
-    return (isFinite(v) && v > 0) ? v : 3;
+  function __strictToNumberish_v7(text){
+    if (!text) return "";
+    var orig = String(text).toLowerCase();
+    var s = orig
+      .replace(/\b(minus|negative)\b/g, "-")
+      .replace(/\b(plus|positive)\b/g, "")
+      .replace(/\b(comma)\b/g, ".")
+      .replace(/\b(point|dot)\b/g, ".");
+    s = s.replace(/[^0-9.\-]/g, "");
+    if (!/[0-9]/.test(s)) return "";
+    s = s.replace(/(?!^)-/g, "");
+    var parts = s.split(".");
+    if (parts.length > 2) s = parts.shift() + "." + parts.join("");
+    if (s.startsWith(".")) s = "0" + s;
+    if (s.endsWith("."))   s = s.slice(0, -1);
+    return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
   }
-  function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+  window.toNumberish = __strictToNumberish_v7;
 
-  function resetAnchorFromActive(){
-    if(!window.active) return;
-    window.__EVS.baseRow = window.active.r;
-    window.__EVS.baseCol = window.active.c;
-    window.__EVS.count   = 0;
+  function __getMode(){
+    var el = document.getElementById("v22-mic-mode") || document.getElementById("mic-mode") || document.getElementById("micMode");
+    return (el && el.value) ? String(el.value).toLowerCase() : "numbers";
   }
-
-  // Reset anchor on mic button press (safe even if it toggles off)
-  if (micBtn && !micBtn.__evsAnchorBound){
-    micBtn.addEventListener('click', function(){ setTimeout(resetAnchorFromActive, 0); }, true);
-    micBtn.__evsAnchorBound = true;
-  }
-  // Reset anchor when user changes direction
-  if (dirSel && !dirSel.__evsAnchorBound){
-    dirSel.addEventListener('change', function(){ resetAnchorFromActive(); }, true);
-    dirSel.__evsAnchorBound = true;
-  }
-
-  // Canonical advanceWithLimit for dictation
-  window.advanceWithLimit = function(){
+  function __isMicActive(){
     try{
-      if (!(autoChk && autoChk.checked) || !window.active || typeof window.setActive !== 'function') return;
-      var ROWS = window.ROWS || 100, COLS = window.COLS || 26;
-      var N = readLimit();
-      var dir = readDir();
+      var btn = document.getElementById("micBtn") || document.getElementById("mic-start") || document.getElementById("mic-toggle") || document.getElementById("startMic");
+      var on = !!(btn && btn.classList && btn.classList.contains("listening"));
+      return on || !!window._dictationActive || !!window.__dictationRunning;
+    }catch(e){ return !!window._dictationActive; }
+  }
 
-      // Ensure anchor exists
-      if (window.__EVS.baseRow == null || window.__EVS.baseCol == null){
-        resetAnchorFromActive();
-        return;
-      }
+  if (typeof window.setCell === "function" && !window.setCell.__numbersHardGuardV7){
+    const __orig = window.setCell;
+    window.setCell = function(r, c, val, opts){
+      try{
+        if (__isMicActive() && (__getMode() === "numbers" || __getMode() === "digits")){
+          var clean = __strictToNumberish_v7(val);
+          if (!clean) return;
+          val = clean;
+        }
+      }catch(e){}
+      return __orig.call(this, r, c, val, opts);
+    };
+    window.setCell.__numbersHardGuardV7 = true;
+  }
+  if (typeof window.writeActive === "function" && !window.writeActive.__numbersHardGuardV7){
+    const __origW = window.writeActive;
+    window.writeActive = function(next){
+      try{
+        if (__isMicActive() && (__getMode() === "numbers" || __getMode() === "digits")){
+          var clean = __strictToNumberish_v7(next);
+          if (!clean) return;
+          next = clean;
+        }
+      }catch(e){}
+      return __origW.call(this, next);
+    };
+    window.writeActive.__numbersHardGuardV7 = true;
+  }
 
-      var r = window.active.r, c = window.active.c;
+  function __getActiveCell(){
+    try{
+      if (window.getActiveCell) return window.getActiveCell();
+      if (window.active && typeof window.active.r === "number") return window.active;
+    }catch(e){}
+    return null;
+  }
+  function __setAnchorFromActive(){
+    var a = __getActiveCell();
+    if (!a) return;
+    window.__EVS = window.__EVS || { baseRow:null, baseCol:null, count:0 };
+    window.__EVS.baseRow = a.r;
+    window.__EVS.baseCol = a.c;
+    window.__EVS.count   = 0;
+    window.block = window.block || {};
+    window.block.startR = a.r; window.block.startC = a.c; window.block.count = 0;
+    window.__dictBlock = window.__dictBlock || {};
+    window.__dictBlock.startR = a.r; window.__dictBlock.startC = a.c; window.__dictBlock.count = 0;
+  }
 
-      if (dir === 'right'){
-        if (window.__EVS.count < N - 1){
-          window.__EVS.count++;
-          window.setActive(r, clamp(c + 1, 1, COLS), true);
-        } else {
-          window.__EVS.count = 0;
-          window.__EVS.baseRow = clamp(window.__EVS.baseRow + 1, 1, ROWS);
-          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
-        }
-      } else if (dir === 'left'){
-        if (window.__EVS.count < N - 1){
-          window.__EVS.count++;
-          window.setActive(r, clamp(c - 1, 1, COLS), true);
-        } else {
-          window.__EVS.count = 0;
-          window.__EVS.baseRow = clamp(window.__EVS.baseRow - 1, 1, ROWS);
-          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
-        }
-      } else if (dir === 'down'){
-        if (window.__EVS.count < N - 1){
-          window.__EVS.count++;
-          window.setActive(clamp(r + 1, 1, ROWS), c, true);
-        } else {
-          window.__EVS.count = 0;
-          window.__EVS.baseCol = clamp(window.__EVS.baseCol + 1, 1, COLS);
-          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
-        }
-      } else if (dir === 'up'){
-        if (window.__EVS.count < N - 1){
-          window.__EVS.count++;
-          window.setActive(clamp(r - 1, 1, ROWS), c, true);
-        } else {
-          window.__EVS.count = 0;
-          window.__EVS.baseCol = clamp(window.__EVS.baseCol - 1, 1, COLS);
-          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
-        }
-      }
-    }catch(e){ /* keep silent to avoid breaking dictation */ }
-  };
+  function __attachToRecognizer(){
+    var rec = window.rec || window._rec || window.recognizer || window._recognizer;
+    if (!rec || rec.__evsAnchorStartBound) return false;
+    var _oldStart = rec.onstart;
+    rec.onstart = function(){
+      try{ __setAnchorFromActive(); }catch(e){}
+      if (typeof _oldStart === "function") try{ _oldStart.apply(this, arguments); }catch(e){}
+    };
+    rec.__evsAnchorStartBound = true;
+    return true;
+  }
+
+  if (!__attachToRecognizer()){
+    var tries = 0, t = setInterval(function(){
+      tries++;
+      if (__attachToRecognizer() || tries > 30) clearInterval(t);
+    }, 200);
+  }
+
+  (function(){
+    var btn = document.getElementById("micBtn") || document.getElementById("mic-start") || document.getElementById("mic-toggle") || document.getElementById("startMic");
+    if (!btn || btn.__evsMO) return;
+    try{
+      var lastHad = btn.classList.contains("listening");
+      var mo = new MutationObserver(function(){
+        var nowHad = btn.classList.contains("listening");
+        if (!lastHad && nowHad){ setTimeout(__setAnchorFromActive, 0); }
+        lastHad = nowHad;
+      });
+      mo.observe(btn, { attributes:true, attributeFilter:["class"] });
+      btn.__evsMO = mo;
+    }catch(e){}
+  })();
 })();
 </script>
 
