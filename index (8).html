@@ -3955,6 +3955,101 @@ function normalizeDigitsTo0xxx(val){
 })();
 </script>
 
+
+<!-- Injected v6: definitive mic anchor + wrap logic (Right wraps to same start column) -->
+<script>
+(function(){
+  var dirSel  = document.getElementById('direction') || document.getElementById('voice-direction');
+  var limitEl = document.getElementById('advanceLimit');
+  var autoChk = document.getElementById('autoAdvance') || document.getElementById('auto-advance');
+  var micBtn  = document.getElementById('micBtn') || document.getElementById('mic-start') || document.getElementById('mic-toggle') || document.getElementById('startMic');
+
+  // Shared dictation state
+  window.__EVS = window.__EVS || { baseRow:null, baseCol:null, count:0 };
+
+  function readDir(){ return (dirSel && dirSel.value ? String(dirSel.value).toLowerCase() : 'right'); }
+  function readLimit(){
+    var v = (limitEl && limitEl.value) ? parseInt(limitEl.value, 10) : 3;
+    return (isFinite(v) && v > 0) ? v : 3;
+  }
+  function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+
+  function resetAnchorFromActive(){
+    if(!window.active) return;
+    window.__EVS.baseRow = window.active.r;
+    window.__EVS.baseCol = window.active.c;
+    window.__EVS.count   = 0;
+  }
+
+  // Reset anchor on mic button press (safe even if it toggles off)
+  if (micBtn && !micBtn.__evsAnchorBound){
+    micBtn.addEventListener('click', function(){ setTimeout(resetAnchorFromActive, 0); }, true);
+    micBtn.__evsAnchorBound = true;
+  }
+  // Reset anchor when user changes direction
+  if (dirSel && !dirSel.__evsAnchorBound){
+    dirSel.addEventListener('change', function(){ resetAnchorFromActive(); }, true);
+    dirSel.__evsAnchorBound = true;
+  }
+
+  // Canonical advanceWithLimit for dictation
+  window.advanceWithLimit = function(){
+    try{
+      if (!(autoChk && autoChk.checked) || !window.active || typeof window.setActive !== 'function') return;
+      var ROWS = window.ROWS || 100, COLS = window.COLS || 26;
+      var N = readLimit();
+      var dir = readDir();
+
+      // Ensure anchor exists
+      if (window.__EVS.baseRow == null || window.__EVS.baseCol == null){
+        resetAnchorFromActive();
+        return;
+      }
+
+      var r = window.active.r, c = window.active.c;
+
+      if (dir === 'right'){
+        if (window.__EVS.count < N - 1){
+          window.__EVS.count++;
+          window.setActive(r, clamp(c + 1, 1, COLS), true);
+        } else {
+          window.__EVS.count = 0;
+          window.__EVS.baseRow = clamp(window.__EVS.baseRow + 1, 1, ROWS);
+          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
+        }
+      } else if (dir === 'left'){
+        if (window.__EVS.count < N - 1){
+          window.__EVS.count++;
+          window.setActive(r, clamp(c - 1, 1, COLS), true);
+        } else {
+          window.__EVS.count = 0;
+          window.__EVS.baseRow = clamp(window.__EVS.baseRow - 1, 1, ROWS);
+          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
+        }
+      } else if (dir === 'down'){
+        if (window.__EVS.count < N - 1){
+          window.__EVS.count++;
+          window.setActive(clamp(r + 1, 1, ROWS), c, true);
+        } else {
+          window.__EVS.count = 0;
+          window.__EVS.baseCol = clamp(window.__EVS.baseCol + 1, 1, COLS);
+          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
+        }
+      } else if (dir === 'up'){
+        if (window.__EVS.count < N - 1){
+          window.__EVS.count++;
+          window.setActive(clamp(r - 1, 1, ROWS), c, true);
+        } else {
+          window.__EVS.count = 0;
+          window.__EVS.baseCol = clamp(window.__EVS.baseCol - 1, 1, COLS);
+          window.setActive(window.__EVS.baseRow, window.__EVS.baseCol, true);
+        }
+      }
+    }catch(e){ /* keep silent to avoid breaking dictation */ }
+  };
+})();
+</script>
+
 </body>
 </html>
 
