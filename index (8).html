@@ -4076,310 +4076,130 @@ function normalizeDigitsTo0xxx(val){
 </script>
 
 
-<!-- Injected: Mic v8 — single pipeline (re‑anchor, no-jump, multi‑digit aggregator, sensitivity improvements) -->
+<!-- Injected: Mic v2 — single pipeline (re-anchor, no-jump, multi-digit aggregator, final-only) -->
 <script>
 (function(){
-  // ===== Helpers =====
+  if (window.__MIC_V2_INSTALLED__) return;
+  window.__MIC_V2_INSTALLED__ = true;
   function $(id){ return document.getElementById(id); }
-  function getMode(){
-    var el = $("v22-mic-mode") || $("mic-mode") || $("micMode");
-    return (el && el.value) ? String(el.value).toLowerCase() : "numbers";
-  }
+  function getMode(){ var el = $("v22-mic-mode") || $("mic-mode") || $("micMode"); return (el && el.value) ? String(el.value).toLowerCase() : "numbers"; }
   function getDir(){ var el = $("direction"); return (el && el.value) ? el.value : "right"; }
-  function getLimit(){
-    var el = $("advanceLimit");
-    var n = el ? parseInt(el.value, 10) : 3;
-    return isFinite(n) && n > 0 ? n : 3;
-  }
+  function getLimit(){ var el = $("advanceLimit"); var n = el ? parseInt(el.value, 10) : 3; return isFinite(n)&&n>0 ? n : 3; }
   function isAuto(){ var el = $("autoAdvance") || $("auto-advance"); return !!(el && el.checked); }
-  function gridSize(){ try{ return { rows: (window.ROWS||200), cols: (window.COLS||26) }; }catch(e){ return {rows:200, cols:26}; } }
-  function activeCell(){ try{ return window.active || (window.getActiveCell && window.getActiveCell()) || {r:1,c:1}; }catch(e){ return {r:1,c:1}; } }
+  function gridSize(){ try{ return { rows:(window.ROWS||200), cols:(window.COLS||26) }; }catch(e){ return {rows:200, cols:26}; } }
+  function activeCell(){ try{ return window.active || (window.getActiveCell&&window.getActiveCell()) || {r:1,c:1}; }catch(e){ return {r:1,c:1}; } }
   function setActiveCell(r,c){ try{ if (window.setActive) window.setActive(r,c); }catch(e){} }
   function writeActive(val){
     try{
-      if (typeof window.setCell === "function" && window.active){
-        window.setCell(window.active.r, window.active.c, val); return true;
-      }
-      var act = document.activeElement;
-      if (act && act.tagName === "INPUT" && act.closest(".cell")){
-        act.value = val;
-        act.dispatchEvent(new Event("input",{bubbles:true}));
-        return true;
-      }
+      if (typeof window.setCell==="function" && window.active){ window.setCell(window.active.r, window.active.c, val); return true; }
+      var act=document.activeElement;
+      if (act && act.tagName==="INPUT" && act.closest(".cell")){ act.value = val; act.dispatchEvent(new Event("input",{bubbles:true})); return true; }
     }catch(_) {}
     return false;
   }
   function digitsTo0xxxIfToggled(val){
-    try{
-      var cb = $("optScaleDigits");
-      if (cb && cb.checked){
-        var s = String(val);
-        if (/^\d+$/.test(s) && !/^0\.\d+$/.test(s)) return "0." + s;
-      }
-    }catch(_){}
+    try{ var cb = $("optScaleDigits"); if (cb && cb.checked){ var s=String(val); if (/^\d+$/.test(s) && !/^0\.\d+$/.test(s)) return "0."+s; } }catch(_){}
     return val;
   }
-
-  // Number sanitizer: keeps only numeric content; supports negative, decimal.
   function toNumberishStrict(text){
     if (!text) return "";
     var s = String(text).toLowerCase();
-    s = s.replace(/\b(minus|negative)\b/g, "-")
-         .replace(/\b(plus|positive)\b/g, "")
-         .replace(/\b(comma)\b/g, ".")
-         .replace(/\b(point|dot)\b/g, ".");
-    s = s.replace(/[^0-9.\-]/g, "");
+    s = s.replace(/\b(minus|negative)\b/g,"-").replace(/\b(plus|positive)\b/g,"").replace(/\b(comma)\b/g,".").replace(/\b(point|dot)\b/g,".");
+    s = s.replace(/[^0-9.\-]/g,"");
     if (!/[0-9]/.test(s)) return "";
-    s = s.replace(/(?!^)-/g, "");
+    s = s.replace(/(?!^)-/g,"");
     var parts = s.split(".");
-    if (parts.length > 2) s = parts.shift()+"."+parts.join("");
+    if (parts.length>2) s = parts.shift()+"."+parts.join("");
     if (s.startsWith(".")) s = "0"+s;
     if (s.endsWith(".")) s = s.slice(0,-1);
     return /^\-?\d+(\.\d+)?$/.test(s) ? s : "";
   }
-
-  // Word-to-number for digit sequences (e.g., "seven oh five" -> "705"; "point zero six" -> ".06")
-  var NUM_WORD = {
-    "zero":0,"oh":0,"o":0,"one":1,"two":2,"three":3,"four":4,"for":4,"fore":4,
-    "five":5,"six":6,"seven":7,"eight":8,"ate":8,"nine":9
-  };
+  var NUM_WORD = {"zero":0,"oh":0,"o":0,"one":1,"two":2,"three":3,"four":4,"for":4,"fore":4,"five":5,"six":6,"seven":7,"eight":8,"ate":8,"nine":9};
   function wordsToDigits(seq){
     if (!seq) return "";
     var s = String(seq).toLowerCase().trim();
     if (!s) return "";
-    // handle decimal marker
-    var out = "";
-    var sawAny = false;
-    var tokens = s.replace(/[^a-z0-9\.\- ]/g," ").split(/\s+/).filter(Boolean);
-    var i=0;
-    var neg = false;
-    if (tokens[0]==="minus" || tokens[0]==="negative"){ neg = true; tokens.shift(); }
+    var out = "", saw=false, i=0, neg=false;
+    var tokens = s.replace(/[^a-z0-9.\- ]/g," ").split(/\s+/).filter(Boolean);
+    if (tokens[0]==="minus"||tokens[0]==="negative"){ neg=true; tokens.shift(); }
     while(i<tokens.length){
       var t = tokens[i];
-      if (t==="point" || t==="dot" || t==="comma"){
-        // everything after are per-digit
-        out += ".";
-        i++;
+      if (t==="point"||t==="dot"||t==="comma"){
+        out += "."; i++;
         while(i<tokens.length){
           var tt = tokens[i];
-          if (/^\d$/.test(tt)) { out += tt; sawAny = true; }
-          else if (NUM_WORD.hasOwnProperty(tt)) { out += String(NUM_WORD[tt]); sawAny = true; }
-          else if (/^\d+$/.test(tt)) { out += tt; sawAny = true; }
+          if (/^\d$/.test(tt)) { out+=tt; saw=true; }
+          else if (NUM_WORD.hasOwnProperty(tt)) { out+=String(NUM_WORD[tt]); saw=true; }
+          else if (/^\d+$/.test(tt)) { out+=tt; saw=true; }
           i++;
         }
         break;
       }
-      if (/^\d+$/.test(t)) { out += t; sawAny = true; i++; continue; }
-      if (/^\d$/.test(t)) { out += t; sawAny = true; i++; continue; }
-      if (NUM_WORD.hasOwnProperty(t)) { out += String(NUM_WORD[t]); sawAny = true; i++; continue; }
-      // ignore other words in numbers mode
+      if (/^\d+$/.test(t)) { out+=t; saw=true; i++; continue; }
+      if (/^\d$/.test(t)) { out+=t; saw=true; i++; continue; }
+      if (NUM_WORD.hasOwnProperty(t)) { out+=String(NUM_WORD[t]); saw=true; i++; continue; }
       i++;
     }
-    if (!sawAny) return "";
-    if (neg) out = "-" + out;
-    return toNumberishStrict(out); // final sanity
+    if (!saw) return "";
+    if (neg) out = "-"+out;
+    return toNumberishStrict(out);
   }
-
   function sanitizeByMode(raw){
-    var mode = getMode();
-    if (mode === "numbers" || mode === "digits"){
-      // Prefer wordsToDigits first; if empty, try strict numeric sanitizer
-      var w = wordsToDigits(raw);
-      if (w) return w;
-      return toNumberishStrict(raw);
-    }
+    var mode=getMode();
+    if (mode==="numbers"||mode==="digits"){ var w=wordsToDigits(raw); if (w) return w; return toNumberishStrict(raw); }
     return String(raw||"").trim();
   }
-
-  // ===== Advance logic with anchor + wrap =====
-  var anchor = { r:null, c:null, count:0 };
-  function setAnchorFromActive(){
-    var a = activeCell();
-    anchor.r = a.r; anchor.c = a.c; anchor.count = 0;
-  }
+  var anchor={r:null,c:null,count:0};
+  function setAnchorFromActive(){ var a = activeCell(); anchor.r=a.r; anchor.c=a.c; anchor.count=0; }
   function advanceOnce(){
     if (!isAuto()) return;
-    var dir = getDir();
-    var N = getLimit();
-    var sz = gridSize();
-    if (anchor.r == null || anchor.c == null) setAnchorFromActive();
-
+    var dir=getDir(); var N=getLimit(); var sz=gridSize();
+    if (anchor.r==null || anchor.c==null) setAnchorFromActive();
     anchor.count++;
-    if (dir === "right"){
-      if (anchor.count < N){
-        setActiveCell(activeCell().r, Math.min(sz.cols, activeCell().c + 1));
-      } else {
-        anchor.count = 0;
-        setActiveCell(Math.min(sz.rows, activeCell().r + 1), anchor.c);
-      }
-    } else if (dir === "down"){
-      if (anchor.count < N){
-        setActiveCell(Math.min(sz.rows, activeCell().r + 1), activeCell().c);
-      } else {
-        anchor.count = 0;
-        setActiveCell(anchor.r, Math.min(sz.cols, activeCell().c + 1));
-      }
-    } else if (dir === "left"){
-      if (anchor.count < N){
-        setActiveCell(activeCell().r, Math.max(1, activeCell().c - 1));
-      } else {
-        anchor.count = 0;
-        setActiveCell(Math.max(1, activeCell().r - 1), anchor.c);
-      }
-    } else if (dir === "up"){
-      if (anchor.count < N){
-        setActiveCell(Math.max(1, activeCell().r - 1), activeCell().c);
-      } else {
-        anchor.count = 0;
-        setActiveCell(anchor.r, Math.max(1, activeCell().c - 1));
-      }
+    if (dir==="right"){
+      if (anchor.count<N){ setActiveCell(activeCell().r, Math.min(sz.cols, activeCell().c+1)); }
+      else { anchor.count=0; setActiveCell(Math.min(sz.rows, activeCell().r+1), anchor.c); }
+    } else if (dir==="down"){
+      if (anchor.count<N){ setActiveCell(Math.min(sz.rows, activeCell().r+1), activeCell().c); }
+      else { anchor.count=0; setActiveCell(anchor.r, Math.min(sz.cols, activeCell().c+1)); }
+    } else if (dir==="left"){
+      if (anchor.count<N){ setActiveCell(activeCell().r, Math.max(1, activeCell().c-1)); }
+      else { anchor.count=0; setActiveCell(Math.max(1, activeCell().r-1), anchor.c); }
+    } else if (dir==="up"){
+      if (anchor.count<N){ setActiveCell(Math.max(1, activeCell().r-1), activeCell().c); }
+      else { anchor.count=0; setActiveCell(anchor.r, Math.max(1, activeCell().c-1)); }
     }
   }
-
-  // ===== Mic pipeline (single instance) =====
   function installMic(){
-    var micBtn = $("micBtn");
-    if (!micBtn) return;
-
-    // Remove all prior listeners by cloning
-    var clone = micBtn.cloneNode(true);
-    micBtn.parentNode.replaceChild(clone, micBtn);
-    micBtn = $("micBtn");
-
+    var micBtn = $("micBtn"); if (!micBtn) return;
+    var clone = micBtn.cloneNode(true); micBtn.parentNode.replaceChild(clone, micBtn); micBtn = $("micBtn");
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR){ micBtn.disabled = true; micBtn.textContent = "Speech not supported"; return; }
-
-    var rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    // UK locale tends to help Gen Z accents in UK environments; still robust for digits.
-    rec.lang = 'en-GB';
-
-    var running = false;
-    var keepAlive = false;
-    var restartTimer = null;
-
-    // Aggregator state
-    var buf = "";            // digits buffer
-    var lastFinalAt = 0;
-    var commitTimer = null;
-
-    function setUI(on){
-      if (on) { micBtn.classList.add("listening"); micBtn.textContent = "🛑 Stop Mic"; }
-      else    { micBtn.classList.remove("listening"); micBtn.textContent = "🎤 Start Mic"; }
-    }
-
-    function flushBuffer(){
-      if (!buf) return false;
-      var val = digitsTo0xxxIfToggled(buf);
-      writeActive(val);
-      buf = "";
-      advanceOnce();
-      return true;
-    }
-
-    function scheduleCommit(){
-      clearTimeout(commitTimer);
-      var silenceMs = (function(){ var el=$("silenceMs"); var v = el ? parseInt(el.value,10) : 1000; return isFinite(v)&&v>=200 ? v : 1000; })();
-      commitTimer = setTimeout(function(){ flushBuffer(); }, silenceMs);
-    }
-
-    rec.onstart = function(){ running = true; setUI(true); };
-    rec.onend   = function(){
-      running = false; setUI(false);
-      clearTimeout(commitTimer);
-      // If we had digits waiting, commit them without advancing spuriously on "no-speech"
-      flushBuffer();
-      if (keepAlive){
-        clearTimeout(restartTimer);
-        restartTimer = setTimeout(function(){ try{ rec.start(); }catch(_){} }, 250);
+    if (!SR){ micBtn.disabled=true; micBtn.textContent="Speech not supported"; return; }
+    var rec = new SR(); rec.continuous=true; rec.interimResults=false; rec.lang='en-GB';
+    var running=false, keepAlive=false, restartTimer=null;
+    var buf="";
+    function setUI(on){ micBtn.textContent = on ? "🛑 Stop Mic" : "🎤 Start Mic"; if (on) micBtn.classList.add("listening"); else micBtn.classList.remove("listening"); }
+    function flushBuffer(){ if (!buf) return false; var val = digitsTo0xxxIfToggled(buf); writeActive(val); buf=""; advanceOnce(); return true; }
+    rec.onstart=function(){ running=true; setUI(true); };
+    rec.onend=function(){ running=false; setUI(false); buf=""; if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} };
+    rec.onerror=function(e){};
+    rec.onresult=function(ev){
+      for (var i=ev.resultIndex;i<ev.results.length;i++){
+        var res=ev.results[i]; if(!res.isFinal) continue;
+        var raw=(res[0]&&res[0].transcript?res[0].transcript:"").trim(); if(!raw) continue;
+        var clean = sanitizeByMode(raw); if(!clean) continue;
+        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){ buf += clean.replace("-",""); continue; }
+        if (buf) flushBuffer();
+        var val = digitsTo0xxxIfToggled(clean); writeActive(val); advanceOnce();
       }
     };
-    rec.onerror = function(e){
-      // Never advance on errors; just restart if we keepAlive
-      if (e && e.error !== "aborted"){
-        // console.warn("Speech error:", e.error);
-      }
-    };
-
-    rec.onresult = function(ev){
-      window._dictationActive = true;
-      try{
-        var now = Date.now();
-        for (var i = ev.resultIndex; i < ev.results.length; i++){
-          var res = ev.results[i];
-          var isFinal = !!res.isFinal;
-          var raw = (res[0] && res[0].transcript ? res[0].transcript : "").trim();
-          if (!raw) continue;
-
-          var clean = sanitizeByMode(raw);
-          if (!clean){
-            // heard words while in numbers mode → do not advance, do not write
-            continue;
-          }
-
-          // If clean is a single digit and we're in numbers mode, aggregate
-          if ((getMode() === "numbers" || getMode() === "digits") && /^\-?\d(\.\d+)?$/.test(clean) && !clean.includes(".")){
-            // single integer digit (negatives treated as separate utterances)
-            buf += clean.replace("-", ""); // ignore stray minus in aggregation
-            lastFinalAt = now;
-            scheduleCommit();
-            continue;
-          }
-
-          // Multi-digit or decimal number: if buffer has content, commit buffer first,
-          // then commit this number immediately.
-          if (buf) flushBuffer();
-          var val = digitsTo0xxxIfToggled(clean);
-          writeActive(val);
-          advanceOnce();
-          lastFinalAt = now;
-          clearTimeout(commitTimer);
-        }
-      } finally {
-        window._dictationActive = false;
-      }
-    };
-
-    function startMic(){
-      keepAlive = true;
-      setAnchorFromActive(); // hard re‑anchor at start
-      try{ rec.start(); }catch(_){}
-    }
-    function stopMic(){
-      keepAlive = false;
-      clearTimeout(commitTimer);
-      try{ rec.stop(); }catch(_){}
-      setUI(false);
-    }
-
-    micBtn.addEventListener("click", function(){
-      if (!running && !keepAlive) startMic();
-      else stopMic();
-    });
-
-    // Re‑anchor when direction changes
-    var dirSel = $("direction");
-    if (dirSel){
-      dirSel.addEventListener("change", function(){
-        setAnchorFromActive();
-      });
-    }
-
-    // If page becomes visible again, resume quickly
-    document.addEventListener("visibilitychange", function(){
-      if (document.visibilityState === "visible" && keepAlive && !running){
-        try{ rec.start(); }catch(_){}
-      }
-    }, true);
+    function startMic(){ keepAlive=true; setAnchorFromActive(); try{ rec.start(); }catch(_){ } }
+    function stopMic(){ keepAlive=false; try{ rec.stop(); }catch(_){ } setUI(false); }
+    micBtn.addEventListener("click", function(){ if (!running && !keepAlive) startMic(); else stopMic(); });
+    var dirSel=$("direction"); if (dirSel) dirSel.addEventListener("change", setAnchorFromActive);
   }
-
-  // Install after DOM ready
-  if (document.readyState === "complete" || document.readyState === "interactive"){
-    installMic();
-  } else {
-    document.addEventListener("DOMContentLoaded", installMic);
-  }
+  if (document.readyState==="complete"||document.readyState==="interactive") installMic();
+  else document.addEventListener("DOMContentLoaded", installMic);
 })();
 </script>
 </body>
