@@ -535,6 +535,9 @@ var cells=[];   // grid data
 var active={r:1,c:1};
 var sel={r1:1,c1:1,r2:1,c2:1};
 var undoStack=[], redoStack=[];
+window.__VS_CANONICAL_UNDO__ = true;
+window.__VS_CANONICAL_MIC_V2__ = true;
+window.__VS_CANONICAL_SHORTCUTS_BOUND__ = false;
 var colWidths = (function(){ try{ return JSON.parse(localStorage.getItem('colWidths') || '[]'); }catch(e){ return []; } })();
 var rowHeights = (function(){ try{ return JSON.parse(localStorage.getItem('rowHeights') || '[]'); }catch(e){ return []; } })();
 var merges = [];
@@ -934,12 +937,12 @@ function undo(){
     var cur=cells[last.r-1][last.c-1].value||'';
     cells[last.r-1][last.c-1].value=last.prev||'';
     var inp=cellInput(last.r,last.c); if(inp) inp.value=last.prev||'';
-    redoStack.push({ type:'set', r:last.r, c:last.c, prev:cur, next:last.prev||'' });
+    redoStack.push({ type:'set', r:last.r, c:last.c, prev:cur, next:last.next||'' });
   } else if (last.type === 'style') {
     var curSt = JSON.parse(JSON.stringify(cells[last.r-1][last.c-1].style||{}));
     cells[last.r-1][last.c-1].style = JSON.parse(JSON.stringify(last.prev||{}));
     var inp2 = cellInput(last.r, last.c); if (inp2) applyStyleToInput(inp2, last.prev||{});
-    redoStack.push({ type:'style', r:last.r, c:last.c, prev:curSt, next:last.prev||{} });
+    redoStack.push({ type:'style', r:last.r, c:last.c, prev:curSt, next:last.next||{} });
   }
   drawSelection();
 }
@@ -961,6 +964,8 @@ function redo(){
 
 /* ================== Shortcuts (incl. arrow nav while input focused) ================== */
 function attachGlobalShortcuts(){
+  if (window.__VS_CANONICAL_SHORTCUTS_BOUND__) return;
+  window.__VS_CANONICAL_SHORTCUTS_BOUND__ = true;
   (document)&&document.addEventListener('keydown', function(e){
     var meta=e.ctrlKey||e.metaKey;
     if(meta && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
@@ -1348,6 +1353,7 @@ function loadGrid(){
 /* ================== Microphone (onresult-only auto-advance) ================== */
 
 function wireMicrophoneControls(){
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   if (window.__micWired) return; window.__micWired = true;
   var micBtn = document.getElementById('micBtn');
   var dirSel = document.getElementById('direction');
@@ -1943,6 +1949,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 </script>
 <script id="v22-undo-coalesce">
 (function(){
+  if (window.__VS_CANONICAL_UNDO__) return;
   var Stack = [];
   var Redo = [];
   var session = null;
@@ -2244,6 +2251,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   }
 
   /* ---- Whole-cell Undo/Redo (commit on blur/Enter/Tab) ---- */
+  if (!window.__VS_CANONICAL_UNDO__) {
   window.undoStack = window.undoStack || [];
   window.redoStack = window.redoStack || [];
   function cellInput(el){
@@ -2285,6 +2293,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   }
   (document)&&document.addEventListener('focusout', function(e){ if(cellInput(e.target)) commitIfChanged(e.target); });
   (document)&&document.addEventListener('keydown', function(e){
+    if (e.defaultPrevented) return;
     if((e.key==='Enter' || e.key==='Tab') && cellInput(document.activeElement)){
       commitIfChanged(document.activeElement);
     }
@@ -2293,16 +2302,23 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   });
   function doUndo(){
     var it = window.undoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.prev||''); window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.next||''), next:(it.prev||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.prev||'');
+      window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   function doRedo(){
     var it = window.redoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.next||''); window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.next||'');
+      window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   window.doUndo = window.doUndo || doUndo;
   window.doRedo = window.doRedo || doRedo;
+  }
 
-  /* ---- Freeze Top Row / First Col with active styling ---- */
+  /* ---- Freeze Top Row / First Col with active styling ---- 
   function addToggle(btn, onToggle){
     if(!btn) return;
     (btn)&&btn.addEventListener('click', function(){
@@ -2461,6 +2477,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 // === r2e7: Non-destructive fixes appended on top of r2e2 ===
 (function(){
   // ---------- Whole-cell Undo/Redo buffering ----------
+  if (window.__VS_CANONICAL_UNDO__) return;
   var _origPushUndo = typeof window.pushUndo === 'function' ? window.pushUndo : function(){};
   var _sessions = {}; window._editSessions = _sessions;
   window.pushUndo = function(entry){
@@ -2727,6 +2744,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 
   /* ================== Whole-cell Undo/Redo consolidation ================== */
   (function(){
+    if (window.__VS_CANONICAL_UNDO__) return;
     var _origPushUndo = window.pushUndo ? window.pushUndo.bind(window) : function(){};
     window._editSessions = window._editSessions || {};
     function key(r,c){ return r + '|' + c; }
@@ -2983,6 +3001,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 <script id="r2e12-undo-fix">
 /* ================== Whole-cell Undo/Redo consolidation — FINAL ================== */
 (function(){
+  if (window.__VS_CANONICAL_UNDO__) return;
   var _origPushUndo = (typeof window.pushUndo === 'function') ? window.pushUndo.bind(window) : function(){};
   var session = { active:false, r:null, c:null, prev:'', justPushed:false };
 
@@ -3054,6 +3073,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 });
 
 function wireMicrophoneControls() {
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   const micBtn = document.getElementById('micBtn');
   let recognizing = false;
   let recognition;
@@ -3092,8 +3112,13 @@ function wireMicrophoneControls() {
   };
 
   recognition.onerror = (event) => {
-    console.error('Recognition error:', event.error);
-    micStatus.textContent = 'Error: ' + event.error;
+    const err = (event && event.error) ? event.error : '';
+    if (err === 'aborted' || err === 'no-speech') {
+      micStatus.textContent = 'Listening...';
+      return;
+    }
+    console.error('Recognition error:', err);
+    micStatus.textContent = 'Error: ' + err;
   };
 
   recognition.onresult = (event) => {
@@ -3121,6 +3146,7 @@ function wireMicrophoneControls() {
 
 <script>
 (window)&&window.addEventListener('load', () => {
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   console.log("🎤 Mic script initializing");
 
   const micBtn = document.getElementById('micBtn');
@@ -3164,8 +3190,13 @@ function wireMicrophoneControls() {
   };
 
   recognition.onerror = (event) => {
-    console.error('Recognition error:', event.error);
-    micStatus.textContent = 'Error: ' + event.error;
+    const err = (event && event.error) ? event.error : '';
+    if (err === 'aborted' || err === 'no-speech') {
+      micStatus.textContent = 'Listening...';
+      return;
+    }
+    console.error('Recognition error:', err);
+    micStatus.textContent = 'Error: ' + err;
   };
 
   recognition.onresult = (event) => {
@@ -3332,6 +3363,7 @@ function normalizeDigitsTo0xxx(val){
 <!-- === Always-on Microphone (self-healing) v1 === -->
 <script id="mic-always-on-v1">
 (function(){
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   document.addEventListener('DOMContentLoaded', function(){
     const micBtnOrig = document.getElementById('micBtn');
@@ -4178,18 +4210,40 @@ function normalizeDigitsTo0xxx(val){
     var rec = new SR(); rec.continuous=true; rec.interimResults=false; rec.lang='en-GB';
     var running=false, keepAlive=false, restartTimer=null;
     var buf="";
+    var bufferFlushTimer=null;
     function setUI(on){ micBtn.textContent = on ? "🛑 Stop Mic" : "🎤 Start Mic"; if (on) micBtn.classList.add("listening"); else micBtn.classList.remove("listening"); }
-    function flushBuffer(){ if (!buf) return false; var val = digitsTo0xxxIfToggled(buf); writeActive(val); buf=""; advanceOnce(); return true; }
+    function scheduleBufferFlush(){
+      clearTimeout(bufferFlushTimer);
+      bufferFlushTimer = setTimeout(function(){ flushBuffer(); }, 650);
+    }
+    function flushBuffer(){
+      clearTimeout(bufferFlushTimer);
+      if (!buf) return false;
+      var val = digitsTo0xxxIfToggled(buf);
+      writeActive(val);
+      buf="";
+      advanceOnce();
+      return true;
+    }
     rec.onstart=function(){ running=true; setUI(true); };
-    rec.onend=function(){ running=false; setUI(false); buf=""; if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} };
+    rec.onend=function(){
+      running=false;
+      setUI(false);
+      flushBuffer();
+      if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} 
+    };
     rec.onerror=function(e){};
     rec.onresult=function(ev){
       for (var i=ev.resultIndex;i<ev.results.length;i++){
         var res=ev.results[i]; if(!res.isFinal) continue;
         var raw=(res[0]&&res[0].transcript?res[0].transcript:"").trim(); if(!raw) continue;
         var clean = sanitizeByMode(raw); if(!clean) continue;
-        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){ buf += clean.replace("-",""); continue; }
-        if (buf) flushBuffer();
+        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){
+          buf += clean.replace("-","");
+          scheduleBufferFlush();
+          continue;
+        }
+        flushBuffer();
         var val = digitsTo0xxxIfToggled(clean); writeActive(val); advanceOnce();
       }
     };
