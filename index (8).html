@@ -172,13 +172,13 @@ body.dark #mini-toolbar button{ background:#222528; color:var(--text); }
 /* Zoom slider */
 #view-controls{ display:flex; gap:8px; align-items:center; }
 
-/* v19 layout: pin grid below toolbar, above sheets bar */
+/* Layout: keep grid filling viewport, with sheets/status docked after it */
 html, body { height: 100%; }
-body { overflow: hidden; } /* prevent body scroll behind sticky header */
-main { height: calc(100vh - var(--header-h, 0px) - var(--sheets-h, 0px) - var(--status-h, 0px)); overflow: auto; }
+body { overflow: hidden; display:flex; flex-direction:column; }
+main { flex:1 1 auto; min-height:0; overflow:auto; }
 header { position: sticky; top: 0; z-index: 20; }
-#sheets-bar { position: sticky; bottom: 0; z-index: 15; }
-.status { position: sticky; bottom: var(--sheets-h, 0px); background: var(--ribbon-bg); z-index: 14; padding-top:8px; padding-bottom:8px; border-top:1px solid var(--border); }
+#sheets-bar { position: static !important; z-index: 15; }
+.status { position: static; background: var(--ribbon-bg); z-index: 14; padding-top:8px; padding-bottom:8px; border-top:1px solid var(--border); }
 /* Slightly tighter rows */
 .grid td input { padding-top: 4px; padding-bottom: 4px; }
 @media (max-width:600px){
@@ -256,10 +256,8 @@ header { position: sticky; top: 0; z-index: 20; }
     }
   </style>
 <!-- App Icons & PWA -->
-<link rel="icon" href="favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="favicon.svg">
 <link rel="manifest" href="site.webmanifest">
 <meta name="theme-color" content="#20A084">
 <meta name="mobile-web-app-capable" content="yes">
@@ -457,7 +455,7 @@ header { position: sticky; top: 0; z-index: 20; }
 </div>
 </main>
 <!-- Sheets bar -->
-<div id="sheets-bar" style="position:sticky; bottom:0; background:var(--ribbon-bg); border-top:1px solid var(--border); padding:6px 8px; display:flex; gap:6px; align-items:center;">
+<div id="sheets-bar" style="background:var(--ribbon-bg); border-top:1px solid var(--border); padding:6px 8px; display:flex; gap:6px; align-items:center;">
 <div id="sheets-tabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
 <button id="btn-add-sheet">+ Sheet</button>
 <button id="btn-del-sheet">− Sheet</button>
@@ -507,13 +505,13 @@ header { position: sticky; top: 0; z-index: 20; }
 <tr><td>Shift + Tab/Enter</td><td>Move to previous cell</td></tr>
 <tr><td>Delete/Backspace</td><td>Clear selection</td></tr>
 </tbody>
-    \1
+</table>
+</div>
+</div>
 
 <!-- Horizontal Scroll Control -->
 <div class="grid-hscroll" style="padding: 6px 10px; background: var(--toolbar-bg); border-top: 1px solid var(--grid-border);">
 <input id="grid-hscroll" min="0" step="1" style="width: 100%;" type="range" value="0"/>
-</div>
-</table></div>
 </div>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <script>
@@ -3612,6 +3610,7 @@ function normalizeDigitsTo0xxx(val){
 
 <!-- Removed redundant LOCAL_STT_ENDPOINT injection and closing tags -->
 
+<script>
 (function(){
   document.addEventListener("DOMContentLoaded", function(){
     // Attempt late-binding for any controls that may have been bound too early
