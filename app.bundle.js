@@ -2164,12 +2164,12 @@ function undo(){
     var cur=cells[last.r-1][last.c-1].value||'';
     cells[last.r-1][last.c-1].value=last.prev||'';
     var inp=cellInput(last.r,last.c); if(inp) inp.value=last.prev||'';
-    redoStack.push({ type:'set', r:last.r, c:last.c, prev:cur, next:last.prev||'' });
+    redoStack.push({ type:'set', r:last.r, c:last.c, prev:cur, next:last.next||'' });
   } else if (last.type === 'style') {
     var curSt = JSON.parse(JSON.stringify(cells[last.r-1][last.c-1].style||{}));
     cells[last.r-1][last.c-1].style = JSON.parse(JSON.stringify(last.prev||{}));
     var inp2 = cellInput(last.r, last.c); if (inp2) applyStyleToInput(inp2, last.prev||{});
-    redoStack.push({ type:'style', r:last.r, c:last.c, prev:curSt, next:last.prev||{} });
+    redoStack.push({ type:'style', r:last.r, c:last.c, prev:curSt, next:last.next||{} });
   }
   drawSelection();
 }
