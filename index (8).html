@@ -2285,6 +2285,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   }
   (document)&&document.addEventListener('focusout', function(e){ if(cellInput(e.target)) commitIfChanged(e.target); });
   (document)&&document.addEventListener('keydown', function(e){
+    if (e.defaultPrevented) return;
     if((e.key==='Enter' || e.key==='Tab') && cellInput(document.activeElement)){
       commitIfChanged(document.activeElement);
     }
@@ -2293,11 +2294,17 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   });
   function doUndo(){
     var it = window.undoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.prev||''); window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.next||''), next:(it.prev||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.prev||'');
+      window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   function doRedo(){
     var it = window.redoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.next||''); window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.next||'');
+      window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   window.doUndo = window.doUndo || doUndo;
   window.doRedo = window.doRedo || doRedo;
@@ -3092,8 +3099,13 @@ function wireMicrophoneControls() {
   };
 
   recognition.onerror = (event) => {
-    console.error('Recognition error:', event.error);
-    micStatus.textContent = 'Error: ' + event.error;
+    const err = (event && event.error) ? event.error : '';
+    if (err === 'aborted' || err === 'no-speech') {
+      micStatus.textContent = 'Listening...';
+      return;
+    }
+    console.error('Recognition error:', err);
+    micStatus.textContent = 'Error: ' + err;
   };
 
   recognition.onresult = (event) => {
@@ -3164,8 +3176,13 @@ function wireMicrophoneControls() {
   };
 
   recognition.onerror = (event) => {
-    console.error('Recognition error:', event.error);
-    micStatus.textContent = 'Error: ' + event.error;
+    const err = (event && event.error) ? event.error : '';
+    if (err === 'aborted' || err === 'no-speech') {
+      micStatus.textContent = 'Listening...';
+      return;
+    }
+    console.error('Recognition error:', err);
+    micStatus.textContent = 'Error: ' + err;
   };
 
   recognition.onresult = (event) => {
@@ -4178,18 +4195,40 @@ function normalizeDigitsTo0xxx(val){
     var rec = new SR(); rec.continuous=true; rec.interimResults=false; rec.lang='en-GB';
     var running=false, keepAlive=false, restartTimer=null;
     var buf="";
+    var bufferFlushTimer=null;
     function setUI(on){ micBtn.textContent = on ? "🛑 Stop Mic" : "🎤 Start Mic"; if (on) micBtn.classList.add("listening"); else micBtn.classList.remove("listening"); }
-    function flushBuffer(){ if (!buf) return false; var val = digitsTo0xxxIfToggled(buf); writeActive(val); buf=""; advanceOnce(); return true; }
+    function scheduleBufferFlush(){
+      clearTimeout(bufferFlushTimer);
+      bufferFlushTimer = setTimeout(function(){ flushBuffer(); }, 650);
+    }
+    function flushBuffer(){
+      clearTimeout(bufferFlushTimer);
+      if (!buf) return false;
+      var val = digitsTo0xxxIfToggled(buf);
+      writeActive(val);
+      buf="";
+      advanceOnce();
+      return true;
+    }
     rec.onstart=function(){ running=true; setUI(true); };
-    rec.onend=function(){ running=false; setUI(false); buf=""; if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} };
+    rec.onend=function(){
+      running=false;
+      setUI(false);
+      flushBuffer();
+      if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} 
+    };
     rec.onerror=function(e){};
     rec.onresult=function(ev){
       for (var i=ev.resultIndex;i<ev.results.length;i++){
         var res=ev.results[i]; if(!res.isFinal) continue;
         var raw=(res[0]&&res[0].transcript?res[0].transcript:"").trim(); if(!raw) continue;
         var clean = sanitizeByMode(raw); if(!clean) continue;
-        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){ buf += clean.replace("-",""); continue; }
-        if (buf) flushBuffer();
+        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){
+          buf += clean.replace("-","");
+          scheduleBufferFlush();
+          continue;
+        }
+        flushBuffer();
         var val = digitsTo0xxxIfToggled(clean); writeActive(val); advanceOnce();
       }
     };
