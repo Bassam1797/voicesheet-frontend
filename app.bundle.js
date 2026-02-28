@@ -301,6 +301,7 @@
   }
   (document)&&document.addEventListener('focusout', function(e){ if(cellInput(e.target)) commitIfChanged(e.target); });
   (document)&&document.addEventListener('keydown', function(e){
+    if (e.defaultPrevented) return;
     if((e.key==='Enter' || e.key==='Tab') && cellInput(document.activeElement)){
       commitIfChanged(document.activeElement);
     }
@@ -309,11 +310,17 @@
   });
   function doUndo(){
     var it = window.undoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.prev||''); window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.next||''), next:(it.prev||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.prev||'');
+      window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   function doRedo(){
     var it = window.redoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.next||''); window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.next||'');
+      window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   window.doUndo = window.doUndo || doUndo;
   window.doRedo = window.doRedo || doRedo;
@@ -1078,8 +1085,13 @@ function wireMicrophoneControls() {
   };
 
   recognition.onerror = (event) => {
-    console.error('Recognition error:', event.error);
-    micStatus.textContent = 'Error: ' + event.error;
+    const err = (event && event.error) ? event.error : '';
+    if (err === 'aborted' || err === 'no-speech') {
+      micStatus.textContent = 'Listening...';
+      return;
+    }
+    console.error('Recognition error:', err);
+    micStatus.textContent = 'Error: ' + err;
   };
 
   recognition.onresult = (event) => {
@@ -1148,8 +1160,13 @@ function wireMicrophoneControls() {
   };
 
   recognition.onerror = (event) => {
-    console.error('Recognition error:', event.error);
-    micStatus.textContent = 'Error: ' + event.error;
+    const err = (event && event.error) ? event.error : '';
+    if (err === 'aborted' || err === 'no-speech') {
+      micStatus.textContent = 'Listening...';
+      return;
+    }
+    console.error('Recognition error:', err);
+    micStatus.textContent = 'Error: ' + err;
   };
 
   recognition.onresult = (event) => {
@@ -1546,18 +1563,34 @@ function normalizeDigitsTo0xxx(val){
     function toNumberish(text){
       if(!text) return null;
       let s = String(text).toLowerCase().trim();
-      s = s.replace(/comma/g,'.').replace(/\s+(point|dot)\s+/g,'.');
+      s = s.replace(/,/g, '.').replace(/\bcomma\b/g,'.').replace(/\b(point|dot|decimal)\b/g,'.');
+
+      const wordToDigit = {
+        'zero':'0','oh':'0','o':'0',
+        'one':'1','won':'1',
+        'two':'2','to':'2','too':'2',
+        'three':'3','four':'4','for':'4',
+        'five':'5','six':'6','seven':'7','eight':'8','ate':'8','nine':'9'
+      };
+
+      const tokens = s.split(/\s+/).filter(Boolean).map(function(tok){
+        if (tok === '-' || tok === 'minus' || tok === 'negative') return '-';
+        if (tok === '.' || tok === 'point' || tok === 'dot' || tok === 'decimal') return '.';
+        if (Object.prototype.hasOwnProperty.call(wordToDigit, tok)) return wordToDigit[tok];
+        return tok;
+      });
+      s = tokens.join('');
+
       if(/[0-9]/.test(s)){
-        // STRICT: keep digits and dots only; ignore hyphens entirely
-        s = s.replace(/[^0-9.]/g,'');
+        s = s.replace(/[^0-9.\-]/g,'');
+        if ((s.match(/-/g)||[]).length > 1) s = s.replace(/-/g, '');
+        if (s.indexOf('-') > 0) s = s.replace(/-/g, '');
         const parts = s.split('.'); if (parts.length>2) s = parts[0]+'.'+parts.slice(1).join('');
-        if (/^\d+\.$/.test(s)) s = s.slice(0,-1);
-        if(!s || s==='.') return null;
+        if (/^-?\d+\.$/.test(s)) s = s.slice(0,-1);
+        if(!s || s==='.' || s==='-') return null;
         const n = Number(s); return isFinite(n) ? String(n) : null;
       }
-      return String(text||'').trim();
-    }
-return String(text||'').trim();
+      return null;
     }
 
     function writeActive(next){
@@ -2131,12 +2164,12 @@ function undo(){
     var cur=cells[last.r-1][last.c-1].value||'';
     cells[last.r-1][last.c-1].value=last.prev||'';
     var inp=cellInput(last.r,last.c); if(inp) inp.value=last.prev||'';
-    redoStack.push({ type:'set', r:last.r, c:last.c, prev:cur, next:last.prev||'' });
+    redoStack.push({ type:'set', r:last.r, c:last.c, prev:cur, next:last.next||'' });
   } else if (last.type === 'style') {
     var curSt = JSON.parse(JSON.stringify(cells[last.r-1][last.c-1].style||{}));
     cells[last.r-1][last.c-1].style = JSON.parse(JSON.stringify(last.prev||{}));
     var inp2 = cellInput(last.r, last.c); if (inp2) applyStyleToInput(inp2, last.prev||{});
-    redoStack.push({ type:'style', r:last.r, c:last.c, prev:curSt, next:last.prev||{} });
+    redoStack.push({ type:'style', r:last.r, c:last.c, prev:curSt, next:last.next||{} });
   }
   drawSelection();
 }
