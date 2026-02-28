@@ -4188,18 +4188,40 @@ function normalizeDigitsTo0xxx(val){
     var rec = new SR(); rec.continuous=true; rec.interimResults=false; rec.lang='en-GB';
     var running=false, keepAlive=false, restartTimer=null;
     var buf="";
+    var bufferFlushTimer=null;
     function setUI(on){ micBtn.textContent = on ? "🛑 Stop Mic" : "🎤 Start Mic"; if (on) micBtn.classList.add("listening"); else micBtn.classList.remove("listening"); }
-    function flushBuffer(){ if (!buf) return false; var val = digitsTo0xxxIfToggled(buf); writeActive(val); buf=""; advanceOnce(); return true; }
+    function scheduleBufferFlush(){
+      clearTimeout(bufferFlushTimer);
+      bufferFlushTimer = setTimeout(function(){ flushBuffer(); }, 650);
+    }
+    function flushBuffer(){
+      clearTimeout(bufferFlushTimer);
+      if (!buf) return false;
+      var val = digitsTo0xxxIfToggled(buf);
+      writeActive(val);
+      buf="";
+      advanceOnce();
+      return true;
+    }
     rec.onstart=function(){ running=true; setUI(true); };
-    rec.onend=function(){ running=false; setUI(false); buf=""; if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} };
+    rec.onend=function(){
+      running=false;
+      setUI(false);
+      flushBuffer();
+      if (keepAlive){ clearTimeout(restartTimer); restartTimer=setTimeout(function(){ try{ rec.start(); }catch(_){ } },250);} 
+    };
     rec.onerror=function(e){};
     rec.onresult=function(ev){
       for (var i=ev.resultIndex;i<ev.results.length;i++){
         var res=ev.results[i]; if(!res.isFinal) continue;
         var raw=(res[0]&&res[0].transcript?res[0].transcript:"").trim(); if(!raw) continue;
         var clean = sanitizeByMode(raw); if(!clean) continue;
-        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){ buf += clean.replace("-",""); continue; }
-        if (buf) flushBuffer();
+        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){
+          buf += clean.replace("-","");
+          scheduleBufferFlush();
+          continue;
+        }
+        flushBuffer();
         var val = digitsTo0xxxIfToggled(clean); writeActive(val); advanceOnce();
       }
     };
