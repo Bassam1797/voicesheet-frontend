@@ -301,6 +301,7 @@
   }
   (document)&&document.addEventListener('focusout', function(e){ if(cellInput(e.target)) commitIfChanged(e.target); });
   (document)&&document.addEventListener('keydown', function(e){
+    if (e.defaultPrevented) return;
     if((e.key==='Enter' || e.key==='Tab') && cellInput(document.activeElement)){
       commitIfChanged(document.activeElement);
     }
@@ -309,11 +310,17 @@
   });
   function doUndo(){
     var it = window.undoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.prev||''); window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.next||''), next:(it.prev||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.prev||'');
+      window.redoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   function doRedo(){
     var it = window.redoStack.pop(); if(!it) return;
-    if(it.type==='set'){ setCellValue(it.r,it.c, it.next||''); window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')}); }
+    if(it.type==='set'){
+      setCellValue(it.r,it.c, it.next||'');
+      window.undoStack.push({type:'set', r:it.r,c:it.c, prev:(it.prev||''), next:(it.next||'')});
+    }
   }
   window.doUndo = window.doUndo || doUndo;
   window.doRedo = window.doRedo || doRedo;
