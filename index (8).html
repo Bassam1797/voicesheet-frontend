@@ -318,6 +318,42 @@ header { position: sticky; top: 0; z-index: 20; }
 <style id="hide-fill-handle">
   .fill-handle{ display:none !important; }
 </style>
+<style id="ui-beautify-v1">
+  body{
+    background: linear-gradient(180deg, #f6f8fc 0%, #eef2f9 100%);
+  }
+  header{
+    backdrop-filter: blur(6px);
+    box-shadow: 0 3px 18px rgba(23, 43, 77, .08);
+  }
+  .group{
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(16,24,40,.08);
+  }
+  .group button, .group select, .group input[type="number"], .group input[type="color"]{
+    border-radius: 10px;
+    transition: transform .12s ease, box-shadow .12s ease, background-color .12s ease;
+  }
+  .group button:hover, .group select:hover{
+    box-shadow: 0 2px 8px rgba(16,24,40,.12);
+    transform: translateY(-1px);
+  }
+  #grid-container .grid{
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .08);
+  }
+  #sheets-bar, .status, .grid-hscroll{
+    background: rgba(255,255,255,.88) !important;
+    backdrop-filter: blur(4px);
+  }
+  body.dark{
+    background: linear-gradient(180deg, #0f1218 0%, #111827 100%);
+  }
+  body.dark #sheets-bar, body.dark .status, body.dark .grid-hscroll{
+    background: rgba(24,28,37,.9) !important;
+  }
+</style>
 </head>
 <body>
 <!-- Inline SVG sprite -->
