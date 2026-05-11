@@ -2162,12 +2162,30 @@ function copySelectionTSV(){
   }
 }
 
+var lastCellTextSelection = null;
+function trackCellTextSelection(input){
+  if(!input || input.tagName!=='INPUT' || !input.closest('.cell')) return;
+  var ss=input.selectionStart, se=input.selectionEnd;
+  lastCellTextSelection = {
+    input: input,
+    start: typeof ss==='number' ? ss : null,
+    end: typeof se==='number' ? se : null
+  };
+}
+(document)&&document.addEventListener('selectionchange', function(){
+  var ae=document.activeElement;
+  if(ae && ae.tagName==='INPUT' && ae.closest('.cell')) trackCellTextSelection(ae);
+});
+
 function copyOrCutTextRange(shouldCut){
   var activeEl=document.activeElement;
-  var inCellInput=activeEl && activeEl.tagName==='INPUT' && activeEl.closest('.cell');
-  var hasTextRange=inCellInput && typeof activeEl.selectionStart==='number' && typeof activeEl.selectionEnd==='number' && activeEl.selectionStart!==activeEl.selectionEnd;
+  var candidate=(activeEl && activeEl.tagName==='INPUT' && activeEl.closest('.cell')) ? activeEl : (lastCellTextSelection && lastCellTextSelection.input);
+  if(!candidate || !candidate.closest || !candidate.closest('.cell')) return false;
+  var ss = typeof candidate.selectionStart==='number' ? candidate.selectionStart : (lastCellTextSelection ? lastCellTextSelection.start : null);
+  var se = typeof candidate.selectionEnd==='number' ? candidate.selectionEnd : (lastCellTextSelection ? lastCellTextSelection.end : null);
+  var hasTextRange = typeof ss==='number' && typeof se==='number' && ss!==se;
   if(!hasTextRange) return false;
-  try { document.execCommand(shouldCut ? 'cut' : 'copy'); } catch(_){}
+  try { candidate.focus(); if(typeof ss==='number' && typeof se==='number' && candidate.setSelectionRange) candidate.setSelectionRange(ss,se); document.execCommand(shouldCut ? 'cut' : 'copy'); } catch(_){}
   return true;
 }
 
