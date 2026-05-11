@@ -2210,11 +2210,15 @@ function attachGlobalShortcuts(){
   window.__VS_CANONICAL_SHORTCUTS_BOUND__ = true;
   (document)&&document.addEventListener('keydown', function(e){
     var meta=e.ctrlKey||e.metaKey;
+    var activeEl=document.activeElement;
+    var inCellInput=activeEl && activeEl.tagName==='INPUT' && activeEl.closest('.cell');
+    var hasTextRange=inCellInput && typeof activeEl.selectionStart==='number' && typeof activeEl.selectionEnd==='number' && activeEl.selectionStart!==activeEl.selectionEnd;
     if(meta && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
     if(meta && (e.key.toLowerCase()==='y' || (e.shiftKey && e.key.toLowerCase()==='z'))){ e.preventDefault(); redo(); }
-    if(meta && e.key.toLowerCase()==='c'){ e.preventDefault(); copySelectionTSV(); }
-    if(meta && e.key.toLowerCase()==='x'){ e.preventDefault(); copySelectionTSV(); deleteSelection(); }
+    if(meta && e.key.toLowerCase()==='c'){ if(hasTextRange) return; e.preventDefault(); copySelectionTSV(); }
+    if(meta && e.key.toLowerCase()==='x'){ if(hasTextRange) return; e.preventDefault(); copySelectionTSV(); deleteSelection(); }
     if(meta && e.key.toLowerCase()==='v'){ 
+      if(inCellInput) return;
       e.preventDefault(); 
       if (navigator.clipboard && navigator.clipboard.readText){
         navigator.clipboard.readText().then(function(t){ if(t){ pasteTSVAtTopLeft(t);} }).catch(function(){});
@@ -2244,8 +2248,9 @@ function attachGlobalShortcuts(){
       }
     }
 
-    // Arrow keys always move selection, even when input focused
+    // Arrow keys move between cells only when not editing a cell
     if(e.key==='ArrowRight' || e.key==='ArrowLeft' || e.key==='ArrowDown' || e.key==='ArrowUp'){
+      if(inCellInput) return;
       e.preventDefault();
       if(e.key==='ArrowRight'){ setActive(active.r, clamp(active.c+1,1,COLS), false); }
       if(e.key==='ArrowLeft'){  setActive(active.r, clamp(active.c-1,1,COLS), false); }
