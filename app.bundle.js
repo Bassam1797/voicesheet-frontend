@@ -2162,6 +2162,15 @@ function copySelectionTSV(){
   }
 }
 
+function copyOrCutTextRange(shouldCut){
+  var activeEl=document.activeElement;
+  var inCellInput=activeEl && activeEl.tagName==='INPUT' && activeEl.closest('.cell');
+  var hasTextRange=inCellInput && typeof activeEl.selectionStart==='number' && typeof activeEl.selectionEnd==='number' && activeEl.selectionStart!==activeEl.selectionEnd;
+  if(!hasTextRange) return false;
+  try { document.execCommand(shouldCut ? 'cut' : 'copy'); } catch(_){}
+  return true;
+}
+
 function pasteTSVAtTopLeft(tsv){
   var R=normSel(sel);
   var matrix=tsv.replace(/\r/g,'').split('\n').map(function(line){ return line.split('\t'); });
@@ -2215,8 +2224,8 @@ function attachGlobalShortcuts(){
     var hasTextRange=inCellInput && typeof activeEl.selectionStart==='number' && typeof activeEl.selectionEnd==='number' && activeEl.selectionStart!==activeEl.selectionEnd;
     if(meta && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
     if(meta && (e.key.toLowerCase()==='y' || (e.shiftKey && e.key.toLowerCase()==='z'))){ e.preventDefault(); redo(); }
-    if(meta && e.key.toLowerCase()==='c'){ if(hasTextRange) return; e.preventDefault(); copySelectionTSV(); }
-    if(meta && e.key.toLowerCase()==='x'){ if(hasTextRange) return; e.preventDefault(); copySelectionTSV(); deleteSelection(); }
+    if(meta && e.key.toLowerCase()==='c'){ if(copyOrCutTextRange(false)) return; e.preventDefault(); copySelectionTSV(); }
+    if(meta && e.key.toLowerCase()==='x'){ if(copyOrCutTextRange(true)) return; e.preventDefault(); copySelectionTSV(); deleteSelection(); }
     if(meta && e.key.toLowerCase()==='v'){ 
       if(inCellInput) return;
       e.preventDefault(); 
@@ -2497,8 +2506,8 @@ function wireContextMenu(){
     menu.style.left=x+'px'; menu.style.top=y+'px';
   });
   (document)&&document.addEventListener('click',function(e){ if(menu && !menu.contains(e.target)) menu.style.display='none'; });
-  var cpy=document.getElementById('ctx-copy'); if(cpy) (cpy)&&cpy.addEventListener('click', function(){ copySelectionTSV(); menu.style.display='none'; });
-  var cut=document.getElementById('ctx-cut'); if(cut) (cut)&&cut.addEventListener('click', function(){ copySelectionTSV(); deleteSelection(); menu.style.display='none'; });
+  var cpy=document.getElementById('ctx-copy'); if(cpy) (cpy)&&cpy.addEventListener('click', function(){ if(!copyOrCutTextRange(false)) copySelectionTSV(); menu.style.display='none'; });
+  var cut=document.getElementById('ctx-cut'); if(cut) (cut)&&cut.addEventListener('click', function(){ if(!copyOrCutTextRange(true)){ copySelectionTSV(); deleteSelection(); } menu.style.display='none'; });
   var pst=document.getElementById('ctx-paste'); if(pst) (pst)&&pst.addEventListener('click', function(){ 
     if (navigator.clipboard && navigator.clipboard.readText){
       navigator.clipboard.readText().then(function(t){ if(t) pasteTSVAtTopLeft(t); }).catch(function(){});
@@ -2881,8 +2890,8 @@ var scRight=document.getElementById('scroll-right'); if (scRight) (scRight)&&scR
   // Show on selection change
   (document)&&document.addEventListener('mouseup', function(e){ var td=e.target.closest?e.target.closest('.cell'):null; if(td){ showAt(e.clientX, e.clientY); } });
   (document)&&document.addEventListener('touchend', function(e){ var t=e.changedTouches && e.changedTouches[0]; if(t){ showAt(t.clientX, t.clientY); } }, {passive:true});
-  document.getElementById('mini-copy').addEventListener('click', function(){ copySelectionTSV(); hide(); });
-  document.getElementById('mini-cut').addEventListener('click', function(){ copySelectionTSV(); deleteSelection(); hide(); });
+  document.getElementById('mini-copy').addEventListener('click', function(){ if(!copyOrCutTextRange(false)) copySelectionTSV(); hide(); });
+  document.getElementById('mini-cut').addEventListener('click', function(){ if(!copyOrCutTextRange(true)){ copySelectionTSV(); deleteSelection(); } hide(); });
   document.getElementById('mini-delete').addEventListener('click', function(){ deleteSelection(); hide(); });
   document.getElementById('mini-paste').addEventListener('click', async function(){ try{ var t=await navigator.clipboard.readText(); if(t) pasteTSVAtTopLeft(t);}catch(err){ console.error(err); } hide(); });
   document.getElementById('mini-color').addEventListener('input', function(e){ applyStyleToSelection('color', e.target.value); });
