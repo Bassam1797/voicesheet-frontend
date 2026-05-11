@@ -4239,8 +4239,8 @@ function normalizeDigitsTo0xxx(val){
         var res=ev.results[i]; if(!res.isFinal) continue;
         var raw=(res[0]&&res[0].transcript?res[0].transcript:"").trim(); if(!raw) continue;
         var clean = sanitizeByMode(raw); if(!clean) continue;
-        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d$/.test(clean)){
-          buf += clean.replace("-","");
+        if ((getMode()==="numbers"||getMode()==="digits") && /^\-?\d+$/.test(clean)){
+          buf += clean.replace(/\D/g,"");
           scheduleBufferFlush();
           continue;
         }
