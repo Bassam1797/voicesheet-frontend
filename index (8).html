@@ -536,6 +536,9 @@ var cells=[];   // grid data
 var active={r:1,c:1};
 var sel={r1:1,c1:1,r2:1,c2:1};
 var undoStack=[], redoStack=[];
+window.__VS_CANONICAL_UNDO__ = true;
+window.__VS_CANONICAL_MIC_V2__ = true;
+window.__VS_CANONICAL_SHORTCUTS_BOUND__ = false;
 var colWidths = (function(){ try{ return JSON.parse(localStorage.getItem('colWidths') || '[]'); }catch(e){ return []; } })();
 var rowHeights = (function(){ try{ return JSON.parse(localStorage.getItem('rowHeights') || '[]'); }catch(e){ return []; } })();
 var merges = [];
@@ -962,6 +965,8 @@ function redo(){
 
 /* ================== Shortcuts (incl. arrow nav while input focused) ================== */
 function attachGlobalShortcuts(){
+  if (window.__VS_CANONICAL_SHORTCUTS_BOUND__) return;
+  window.__VS_CANONICAL_SHORTCUTS_BOUND__ = true;
   (document)&&document.addEventListener('keydown', function(e){
     var meta=e.ctrlKey||e.metaKey;
     if(meta && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
@@ -1349,6 +1354,7 @@ function loadGrid(){
 /* ================== Microphone (onresult-only auto-advance) ================== */
 
 function wireMicrophoneControls(){
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   if (window.__micWired) return; window.__micWired = true;
   var micBtn = document.getElementById('micBtn');
   var dirSel = document.getElementById('direction');
@@ -1944,6 +1950,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 </script>
 <script id="v22-undo-coalesce">
 (function(){
+  if (window.__VS_CANONICAL_UNDO__) return;
   var Stack = [];
   var Redo = [];
   var session = null;
@@ -2245,6 +2252,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   }
 
   /* ---- Whole-cell Undo/Redo (commit on blur/Enter/Tab) ---- */
+  if (!window.__VS_CANONICAL_UNDO__) {
   window.undoStack = window.undoStack || [];
   window.redoStack = window.redoStack || [];
   function cellInput(el){
@@ -2309,8 +2317,9 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
   }
   window.doUndo = window.doUndo || doUndo;
   window.doRedo = window.doRedo || doRedo;
+  }
 
-  /* ---- Freeze Top Row / First Col with active styling ---- */
+  /* ---- Freeze Top Row / First Col with active styling ---- 
   function addToggle(btn, onToggle){
     if(!btn) return;
     (btn)&&btn.addEventListener('click', function(){
@@ -2469,6 +2478,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 // === r2e7: Non-destructive fixes appended on top of r2e2 ===
 (function(){
   // ---------- Whole-cell Undo/Redo buffering ----------
+  if (window.__VS_CANONICAL_UNDO__) return;
   var _origPushUndo = typeof window.pushUndo === 'function' ? window.pushUndo : function(){};
   var _sessions = {}; window._editSessions = _sessions;
   window.pushUndo = function(entry){
@@ -2735,6 +2745,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 
   /* ================== Whole-cell Undo/Redo consolidation ================== */
   (function(){
+    if (window.__VS_CANONICAL_UNDO__) return;
     var _origPushUndo = window.pushUndo ? window.pushUndo.bind(window) : function(){};
     window._editSessions = window._editSessions || {};
     function key(r,c){ return r + '|' + c; }
@@ -2991,6 +3002,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 <script id="r2e12-undo-fix">
 /* ================== Whole-cell Undo/Redo consolidation — FINAL ================== */
 (function(){
+  if (window.__VS_CANONICAL_UNDO__) return;
   var _origPushUndo = (typeof window.pushUndo === 'function') ? window.pushUndo.bind(window) : function(){};
   var session = { active:false, r:null, c:null, prev:'', justPushed:false };
 
@@ -3062,6 +3074,7 @@ var addBtn = document.getElementById('btn-add-sheet'); if(addBtn){ (addBtn)&&add
 });
 
 function wireMicrophoneControls() {
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   const micBtn = document.getElementById('micBtn');
   let recognizing = false;
   let recognition;
@@ -3134,6 +3147,7 @@ function wireMicrophoneControls() {
 
 <script>
 (window)&&window.addEventListener('load', () => {
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   console.log("🎤 Mic script initializing");
 
   const micBtn = document.getElementById('micBtn');
@@ -3350,6 +3364,7 @@ function normalizeDigitsTo0xxx(val){
 <!-- === Always-on Microphone (self-healing) v1 === -->
 <script id="mic-always-on-v1">
 (function(){
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   document.addEventListener('DOMContentLoaded', function(){
     const micBtnOrig = document.getElementById('micBtn');

@@ -135,6 +135,7 @@
 })();
 
 (function(){
+  if (window.__VS_CANONICAL_UNDO__) return;
   var Stack = [];
   var Redo = [];
   var session = null;
@@ -260,6 +261,7 @@
   }
 
   /* ---- Whole-cell Undo/Redo (commit on blur/Enter/Tab) ---- */
+  if (!window.__VS_CANONICAL_UNDO__) {
   window.undoStack = window.undoStack || [];
   window.redoStack = window.redoStack || [];
   function cellInput(el){
@@ -324,8 +326,9 @@
   }
   window.doUndo = window.doUndo || doUndo;
   window.doRedo = window.doRedo || doRedo;
+  }
 
-  /* ---- Freeze Top Row / First Col with active styling ---- */
+  /* ---- Freeze Top Row / First Col with active styling ---- 
   function addToggle(btn, onToggle){
     if(!btn) return;
     (btn)&&btn.addEventListener('click', function(){
@@ -471,6 +474,7 @@
 // === r2e7: Non-destructive fixes appended on top of r2e2 ===
 (function(){
   // ---------- Whole-cell Undo/Redo buffering ----------
+  if (window.__VS_CANONICAL_UNDO__) return;
   var _origPushUndo = typeof window.pushUndo === 'function' ? window.pushUndo : function(){};
   var _sessions = {}; window._editSessions = _sessions;
   window.pushUndo = function(entry){
@@ -724,6 +728,7 @@
 
   /* ================== Whole-cell Undo/Redo consolidation ================== */
   (function(){
+    if (window.__VS_CANONICAL_UNDO__) return;
     var _origPushUndo = window.pushUndo ? window.pushUndo.bind(window) : function(){};
     window._editSessions = window._editSessions || {};
     function key(r,c){ return r + '|' + c; }
@@ -978,6 +983,7 @@
 
 /* ================== Whole-cell Undo/Redo consolidation — FINAL ================== */
 (function(){
+  if (window.__VS_CANONICAL_UNDO__) return;
   var _origPushUndo = (typeof window.pushUndo === 'function') ? window.pushUndo.bind(window) : function(){};
   var session = { active:false, r:null, c:null, prev:'', justPushed:false };
 
@@ -1047,6 +1053,7 @@
 });
 
 function wireMicrophoneControls() {
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   const micBtn = document.getElementById('micBtn');
   let recognizing = false;
   let recognition;
@@ -1117,6 +1124,7 @@ function wireMicrophoneControls() {
 }
 
 (window)&&window.addEventListener('load', () => {
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   console.log("🎤 Mic script initializing");
 
   const micBtn = document.getElementById('micBtn');
@@ -1487,6 +1495,7 @@ function normalizeDigitsTo0xxx(val){
 })();
 
 (function(){
+  if (window.__VS_CANONICAL_MIC_V2__) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   document.addEventListener('DOMContentLoaded', function(){
     const micBtnOrig = document.getElementById('micBtn');
@@ -1763,6 +1772,9 @@ var cells=[];   // grid data
 var active={r:1,c:1};
 var sel={r1:1,c1:1,r2:1,c2:1};
 var undoStack=[], redoStack=[];
+window.__VS_CANONICAL_UNDO__ = true;
+window.__VS_CANONICAL_MIC_V2__ = true;
+window.__VS_CANONICAL_SHORTCUTS_BOUND__ = false;
 var colWidths = (function(){ try{ return JSON.parse(localStorage.getItem('colWidths') || '[]'); }catch(e){ return []; } })();
 var rowHeights = (function(){ try{ return JSON.parse(localStorage.getItem('rowHeights') || '[]'); }catch(e){ return []; } })();
 var merges = [];
@@ -2191,6 +2203,8 @@ function redo(){
 
 /* ================== Shortcuts (incl. arrow nav while input focused) ================== */
 function attachGlobalShortcuts(){
+  if (window.__VS_CANONICAL_SHORTCUTS_BOUND__) return;
+  window.__VS_CANONICAL_SHORTCUTS_BOUND__ = true;
   (document)&&document.addEventListener('keydown', function(e){
     var meta=e.ctrlKey||e.metaKey;
     if(meta && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
