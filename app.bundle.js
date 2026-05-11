@@ -1597,7 +1597,10 @@ function normalizeDigitsTo0xxx(val){
         const parts = s.split('.'); if (parts.length>2) s = parts[0]+'.'+parts.slice(1).join('');
         if (/^-?\d+\.$/.test(s)) s = s.slice(0,-1);
         if(!s || s==='.' || s==='-') return null;
-        const n = Number(s); return isFinite(n) ? String(n) : null;
+        // Keep dictated digits exactly as spoken (including leading zeros)
+        // while still rejecting malformed numeric shapes.
+        if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(s)) return null;
+        return s;
       }
       return null;
     }
