@@ -1853,6 +1853,7 @@ function render(){
       if(m && m.r1===r && m.c1===c2){ td.rowSpan=(m.r2-m.r1+1); td.colSpan=(m.c2-m.c1+1); }
 
       var input=document.createElement('input');
+      bindCellSelectionTracking(input);
       var cellData = cells[r-1] && cells[r-1][c2-1] ? cells[r-1][c2-1] : {value:'', style:{}};
       input.value = cellData.value || '';
       input.setAttribute('aria-label', 'Cell '+colLabel(c2)+r);
@@ -2171,6 +2172,16 @@ function trackCellTextSelection(input){
     start: typeof ss==='number' ? ss : null,
     end: typeof se==='number' ? se : null
   };
+}
+function bindCellSelectionTracking(input){
+  if(!input) return;
+  var update=function(){ trackCellTextSelection(input); };
+  (input)&&input.addEventListener('focus', update);
+  (input)&&input.addEventListener('select', update);
+  (input)&&input.addEventListener('keyup', update);
+  (input)&&input.addEventListener('mouseup', update);
+  (input)&&input.addEventListener('touchend', update, {passive:true});
+  (input)&&input.addEventListener('blur', update);
 }
 (document)&&document.addEventListener('selectionchange', function(){
   var ae=document.activeElement;
