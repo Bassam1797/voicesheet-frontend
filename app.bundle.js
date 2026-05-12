@@ -2183,7 +2183,6 @@ function bindCellSelectionTracking(input){
   (input)&&input.addEventListener('keyup', update);
   (input)&&input.addEventListener('mouseup', update);
   (input)&&input.addEventListener('touchend', update, {passive:true});
-  (input)&&input.addEventListener('blur', update);
 }
 (document)&&document.addEventListener('selectionchange', function(){
   var ae=document.activeElement;
@@ -2213,43 +2212,6 @@ function copyOrCutTextRange(shouldCut){
       trackCellTextSelection(candidate);
     }
   } catch(_){}
-  return true;
-}
-
-var lastCellTextSelection = null;
-function trackCellTextSelection(input){
-  if(!input || input.tagName!=='INPUT' || !input.closest('.cell')) return;
-  var ss=input.selectionStart, se=input.selectionEnd;
-  lastCellTextSelection = {
-    input: input,
-    start: typeof ss==='number' ? ss : null,
-    end: typeof se==='number' ? se : null
-  };
-}
-function bindCellSelectionTracking(input){
-  if(!input) return;
-  var update=function(){ trackCellTextSelection(input); };
-  (input)&&input.addEventListener('focus', update);
-  (input)&&input.addEventListener('select', update);
-  (input)&&input.addEventListener('keyup', update);
-  (input)&&input.addEventListener('mouseup', update);
-  (input)&&input.addEventListener('touchend', update, {passive:true});
-  (input)&&input.addEventListener('blur', update);
-}
-(document)&&document.addEventListener('selectionchange', function(){
-  var ae=document.activeElement;
-  if(ae && ae.tagName==='INPUT' && ae.closest('.cell')) trackCellTextSelection(ae);
-});
-
-function copyOrCutTextRange(shouldCut){
-  var activeEl=document.activeElement;
-  var candidate=(activeEl && activeEl.tagName==='INPUT' && activeEl.closest('.cell')) ? activeEl : (lastCellTextSelection && lastCellTextSelection.input);
-  if(!candidate || !candidate.closest || !candidate.closest('.cell')) return false;
-  var ss = typeof candidate.selectionStart==='number' ? candidate.selectionStart : (lastCellTextSelection ? lastCellTextSelection.start : null);
-  var se = typeof candidate.selectionEnd==='number' ? candidate.selectionEnd : (lastCellTextSelection ? lastCellTextSelection.end : null);
-  var hasTextRange = typeof ss==='number' && typeof se==='number' && ss!==se;
-  if(!hasTextRange) return false;
-  try { candidate.focus(); if(typeof ss==='number' && typeof se==='number' && candidate.setSelectionRange) candidate.setSelectionRange(ss,se); document.execCommand(shouldCut ? 'cut' : 'copy'); } catch(_){}
   return true;
 }
 
